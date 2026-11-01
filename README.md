@@ -297,3 +297,15 @@ npm run start
 - Step 5 - Playwright worker, protected worker endpoints, Actions workflow.
 - Step 6 - Telegram notifications and tick-driven retries.
 - Step 7 - documentation.
+
+## Local executor + cookie sync
+
+When `EXECUTOR=local`, `/api/tick` keeps reminders active but leaves scheduled
+claims to `POST /api/worker/claim`. `worker/run-local.ps1` claims due jobs and
+runs the Playwright worker on the logged-in Windows PC. Change the job's send
+time and timezone in the dashboard; disable the local task with
+`Disable-ScheduledTask -TaskName Tiksave`.
+
+Load `extension/` unpacked at `chrome://extensions` with Developer mode enabled.
+The extension syncs TikTok cookies every 30 minutes and after cookie changes;
+`extension/config.local.js` is local-only and ignored by Git.
