@@ -4,6 +4,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 const PUBLIC_API = [
   /^\/api\/tick$/,
   /^\/api\/worker(\/|$)/,
+  /^\/api\/session\/ingest$/,
   /^\/api\/auth\/login$/,
 ];
 
