@@ -95,9 +95,9 @@ async function openConversationFallback(page: Page, username: string): Promise<v
         console.log("conversation-opened");
         return;
       }
-      const header = await page.locator("header").innerText().catch(() => "");
+      const headers = await page.locator("header").allInnerTexts().catch(() => []);
       const heading = await page.locator("h1,h2,[role=heading]").allInnerTexts().catch(() => []);
-      const identity = `${header} ${heading.join(" ")}`;
+      const identity = `${headers.join(" ")} ${heading.join(" ")}`;
       const match = identity.match(/@[A-Za-z0-9._-]+/);
       if (match?.[0].slice(1).toLowerCase() === target) {
         console.log("conversation-opened");
