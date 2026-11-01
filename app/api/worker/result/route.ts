@@ -81,13 +81,6 @@ export async function POST(request: Request) {
     .set({ lastStatus: status, retryCount, nextRetryAt })
     .where(eq(jobs.id, jobId));
 
-  await addLog({
-    jobId,
-    status,
-    detail,
-    screenshotUrl,
-  });
-
   const label =
     status === "success"
       ? "sent"
@@ -103,7 +96,16 @@ export async function POST(request: Request) {
     lines.push("No retries left.");
   }
 
-  await sendTelegram(lines.join("\n"));
+  const telegram = await sendTelegram(lines.join("\n"));
+  const telegramDetail = `Telegram HTTP ${telegram.httpStatus} ok=${telegram.ok}` +
+    (telegram.errorCode !== undefined ? ` error_code=${telegram.errorCode}` : "") +
+    (telegram.description ? ` description=${telegram.description}` : "");
+  await addLog({
+    jobId,
+    status,
+    detail: [detail, telegramDetail].filter(Boolean).join(" | ").slice(0, 2000),
+    screenshotUrl,
+  });
 
-  return NextResponse.json({ ok: true, retryScheduled });
+  return NextResponse.json({ ok: true, retryScheduled, telegram });
 }

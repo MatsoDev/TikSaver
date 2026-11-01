@@ -4,11 +4,20 @@ export function isTelegramConfigured(): boolean {
   );
 }
 
-export async function sendTelegram(text: string): Promise<boolean> {
+export type TelegramSendResult = {
+  httpStatus: number;
+  ok: boolean;
+  errorCode?: number;
+  description?: string;
+};
+
+export async function sendTelegram(text: string): Promise<TelegramSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (!token || !chatId) return false;
+  if (!token || !chatId) {
+    return { httpStatus: 0, ok: false, description: "Telegram is not configured." };
+  }
 
   try {
     const response = await fetch(
@@ -25,8 +34,25 @@ export async function sendTelegram(text: string): Promise<boolean> {
       },
     );
 
-    return response.ok;
+    const body = (await response.json().catch(() => null)) as {
+      ok?: unknown;
+      error_code?: unknown;
+      description?: unknown;
+    } | null;
+    const description = typeof body?.description === "string"
+      ? body.description.replaceAll(token, "[redacted]").replaceAll(chatId, "[redacted]").slice(0, 300)
+      : undefined;
+    return {
+      httpStatus: response.status,
+      ok: body?.ok === true,
+      ...(typeof body?.error_code === "number" ? { errorCode: body.error_code } : {}),
+      ...(description ? { description } : {}),
+    };
   } catch {
-    return false;
+    return {
+      httpStatus: 0,
+      ok: false,
+      description: "Network error while contacting Telegram.",
+    };
   }
 }

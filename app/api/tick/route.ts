@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       const marker = late ? job.lateReminderSentDate : job.reminderSentDate;
       if (marker !== today) {
         const sent = await sendTelegram("Streak not sent yet today, turn on the PC or send manually.");
-        if (sent) {
+        if (sent.ok) {
           await getDb().update(jobs).set(late
             ? { lateReminderSentDate: today }
             : { reminderSentDate: today },

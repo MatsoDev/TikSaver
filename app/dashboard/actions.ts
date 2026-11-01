@@ -18,6 +18,7 @@ import { addLog } from "@/lib/logs";
 import { requireAuth } from "@/lib/server-auth";
 import { formatDateInZone } from "@/lib/time";
 import { parseJobForm } from "@/lib/validation";
+import { sendTelegram } from "@/lib/telegram";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -114,4 +115,16 @@ export async function sendNowAction(form: FormData): Promise<void> {
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/logs");
+}
+
+export async function testTelegramAction(): Promise<void> {
+  await requireAuth();
+  const result = await sendTelegram("Tiksave Telegram test message.");
+  const params = new URLSearchParams({
+    telegram: result.ok ? "delivered" : "failed",
+    telegramHttp: String(result.httpStatus),
+    ...(result.errorCode !== undefined ? { telegramCode: String(result.errorCode) } : {}),
+    ...(result.description ? { telegramDescription: result.description } : {}),
+  });
+  redirect(`/dashboard?${params.toString()}`);
 }

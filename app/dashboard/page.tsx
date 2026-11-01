@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { isGitHubConfigured } from "@/lib/github";
 import { listJobs } from "@/lib/jobs";
-import { sendNowAction, toggleJobAction } from "./actions";
+import { sendNowAction, testTelegramAction, toggleJobAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,11 @@ function statusLabel(status: string | null): string {
   return status ? status.replaceAll("_", " ") : "never run";
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { telegram?: string; telegramHttp?: string; telegramCode?: string; telegramDescription?: string };
+}) {
   const jobs = await listJobs();
   const githubReady = isGitHubConfigured();
 
@@ -43,13 +47,28 @@ export default async function DashboardPage() {
           </p>
           <p className="text-xs text-zinc-500">Sends once per day when the PC starts.</p>
         </div>
-        <Link
-          href="/dashboard/jobs/new"
-          className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
-        >
-          New job
-        </Link>
+        <div className="flex gap-2">
+          <form action={testTelegramAction}>
+            <button type="submit" className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800">
+              Test Telegram
+            </button>
+          </form>
+          <Link
+            href="/dashboard/jobs/new"
+            className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+          >
+            New job
+          </Link>
+        </div>
       </header>
+
+      {searchParams?.telegram ? (
+        <p className={`rounded-xl border px-4 py-3 text-sm ${searchParams.telegram === "delivered" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-red-500/30 bg-red-500/10 text-red-200"}`}>
+          Telegram {searchParams.telegram}: HTTP {searchParams.telegramHttp ?? "0"}
+          {searchParams.telegramCode ? ` · error ${searchParams.telegramCode}` : ""}
+          {searchParams.telegramDescription ? ` · ${searchParams.telegramDescription}` : ""}
+        </p>
+      ) : null}
 
       {!githubReady ? (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
