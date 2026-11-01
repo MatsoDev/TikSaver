@@ -23,6 +23,8 @@ export const jobs = pgTable(
     lastStatus: text("last_status"),
     retryCount: integer("retry_count").notNull().default(0),
     nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+    reminderSentDate: date("reminder_sent_date"),
+    lateReminderSentDate: date("late_reminder_sent_date"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

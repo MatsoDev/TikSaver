@@ -5,6 +5,7 @@ import { jobs } from "@/db/schema";
 import { timingSafeEqualString } from "@/lib/auth";
 import { dispatchWorkflow } from "@/lib/github";
 import { addLog } from "@/lib/logs";
+import { sendTelegram } from "@/lib/telegram";
 import {
   deterministicJitter,
   getZonedTime,
@@ -44,7 +45,6 @@ export async function GET(request: Request) {
   let failed = 0;
 
   for (const job of enabledJobs) {
-    if (localExecutor) continue;
     if (job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime()) {
       const claimedRetry = await getDb()
         .update(jobs)
@@ -102,6 +102,22 @@ export async function GET(request: Request) {
       failed += 1;
       continue;
     }
+
+    if (job.lastRunDate !== today && currentMinutes >= 20 * 60) {
+      const late = currentMinutes >= 22 * 60 + 30;
+      const marker = late ? job.lateReminderSentDate : job.reminderSentDate;
+      if (marker !== today) {
+        const sent = await sendTelegram("Streak not sent yet today, turn on the PC or send manually.");
+        if (sent) {
+          await getDb().update(jobs).set(late
+            ? { lateReminderSentDate: today }
+            : { reminderSentDate: today },
+          ).where(and(eq(jobs.id, job.id), eq(jobs.enabled, true)));
+        }
+      }
+    }
+
+    if (localExecutor) continue;
 
     const target =
       sendMinutes +
