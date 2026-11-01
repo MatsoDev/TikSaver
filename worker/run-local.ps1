@@ -1,8 +1,9 @@
 $ErrorActionPreference = "Stop"
+$PSScriptRoot | Set-Location
 $node24 = "C:\Users\Matso.DESKTOP-J9C4R3H\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.20.0-win-x64"
 $env:PATH = "$node24;$env:PATH"
 $appUrl = "https://tiksaver-six.vercel.app"
-$cron = ((Get-Content ..\.env.local | Where-Object { $_ -like "CRON_SECRET=*" }).Substring(12)).Trim()
+$cron = ((Get-Content (Join-Path $PSScriptRoot "..\.env.local") | Where-Object { $_ -like "CRON_SECRET=*" }).Substring(12)).Trim()
 $logDir = Join-Path $PSScriptRoot "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir "local.log"
