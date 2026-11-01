@@ -50,6 +50,13 @@ export const SELECTORS = {
     'div[class*="message-content"]',
     'div[class*="MessageContent"]',
   ],
+  outgoingMessage: [
+    '[data-e2e="chat-message"][data-is-own="true"]',
+    '[data-e2e="chat-message"][data-direction="outgoing"]',
+    '[data-e2e="message-bubble"][data-is-own="true"]',
+    '[class*="outgoing" i]',
+    '[class*="sender" i]',
+  ],
   profileReady: [
     'main',
     '[data-e2e="user-profile"]',

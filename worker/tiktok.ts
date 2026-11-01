@@ -3,6 +3,8 @@ import { humanType, sleep } from "./browser";
 import { MESSAGES_URL, PROFILE_URL, SELECTORS } from "./selectors";
 import type { SendResult, WorkerJob } from "./types";
 
+type OutgoingState = { count: number; lastText: string; lastTimestamp: string };
+
 async function firstVisible(
   page: Page,
   selectors: string[],
@@ -85,43 +87,55 @@ async function openConversation(page: Page, username: string): Promise<void> {
   });
 }
 
+async function outgoingState(page: Page): Promise<OutgoingState> {
+  const rows = await page.locator(SELECTORS.outgoingMessage.join(",")).evaluateAll((elements) =>
+    elements.map((element) => ({
+      text: (element.textContent ?? "").trim(),
+      timestamp:
+        element.getAttribute("data-timestamp") ??
+        element.querySelector("time")?.getAttribute("datetime") ??
+        element.querySelector("time")?.textContent?.trim() ?? "",
+    })),
+  ).catch(() => [] as { text: string; timestamp: string }[]);
+  const last = rows.at(-1);
+  return { count: rows.length, lastText: last?.text ?? "", lastTimestamp: last?.timestamp ?? "" };
+}
+
 async function submitMessage(page: Page, message: string): Promise<void> {
+  console.error("[step] finding composer");
   const input = await firstVisible(page, SELECTORS.messageInput);
   if (!input) throw new Error("Could not find the message box");
 
   await input.click();
+  console.error("[step] clicked composer");
   await sleep(400);
   await humanType(page, message);
+  console.error("[step] typed message");
   await sleep(500);
 
+  await page.screenshot({ path: "screenshots/before-send.png" });
   const sendButton = await firstVisible(page, SELECTORS.sendButton);
   if (sendButton) {
     await sendButton.click();
+    console.error("[step] clicked send");
   } else {
     await page.keyboard.press("Enter");
+    console.error("[step] pressed Enter");
   }
+  await page.screenshot({ path: "screenshots/after-send.png" });
 }
 
-async function verifyMessage(page: Page, message: string): Promise<boolean> {
-  const snippet = message.trim().slice(0, 40);
-  if (!snippet) return false;
-
-  await sleep(2500);
-
-  for (const selector of SELECTORS.messageBubble) {
-    const bubbles = page.locator(selector);
-    const count = await bubbles.count().catch(() => 0);
-    const start = Math.max(0, count - 8);
-
-    for (let index = start; index < count; index += 1) {
-      const text = await bubbles
-        .nth(index)
-        .innerText()
-        .catch(() => "");
-      if (text.includes(snippet)) return true;
-    }
+async function verifyMessage(page: Page, message: string, before: OutgoingState): Promise<boolean> {
+  const expected = message.trim();
+  for (let wait = 0; wait < 10; wait += 1) {
+    const after = await outgoingState(page);
+    if (
+      after.count === before.count + 1 &&
+      after.lastText.includes(expected) &&
+      after.lastTimestamp !== before.lastTimestamp
+    ) return true;
+    await sleep(500);
   }
-
   return false;
 }
 
@@ -138,6 +152,8 @@ export async function sendMessage(
     };
   }
 
+  const before = await outgoingState(page);
+  console.error(`[step] outgoing-before=${before.count}`);
   await submitMessage(page, job.message);
 
   if (await detectSessionExpired(page)) {
@@ -147,7 +163,7 @@ export async function sendMessage(
     };
   }
 
-  if (await verifyMessage(page, job.message)) {
+  if (await verifyMessage(page, job.message, before)) {
     return { status: "success", detail: "Message sent and verified." };
   }
 
