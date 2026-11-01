@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { jobs } from "@/db/schema";
@@ -43,6 +43,45 @@ export async function GET(request: Request) {
   let failed = 0;
 
   for (const job of enabledJobs) {
+    if (job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime()) {
+      const claimedRetry = await getDb()
+        .update(jobs)
+        .set({ nextRetryAt: null, lastStatus: "retrying" })
+        .where(
+          and(
+            eq(jobs.id, job.id),
+            eq(jobs.enabled, true),
+            isNotNull(jobs.nextRetryAt),
+            lte(jobs.nextRetryAt, now),
+          ),
+        )
+        .returning({ id: jobs.id });
+
+      if (claimedRetry.length > 0) {
+        const retryResult = await dispatchWorkflow(job.id);
+        if (retryResult.ok) {
+          dispatched += 1;
+          await addLog({
+            jobId: job.id,
+            status: "dispatched",
+            detail: "Retry dispatched to the worker.",
+          });
+        } else {
+          failed += 1;
+          await getDb()
+            .update(jobs)
+            .set({ lastStatus: "dispatch_failed" })
+            .where(eq(jobs.id, job.id));
+          await addLog({
+            jobId: job.id,
+            status: "dispatch_failed",
+            detail: retryResult.detail ?? "Could not dispatch the retry.",
+          });
+        }
+        continue;
+      }
+    }
+
     const sendMinutes = minutesFromTime(job.sendTime);
     if (sendMinutes === null) continue;
 
@@ -70,7 +109,12 @@ export async function GET(request: Request) {
 
     const claimed = await getDb()
       .update(jobs)
-      .set({ lastRunDate: today, lastStatus: "dispatching" })
+      .set({
+        lastRunDate: today,
+        lastStatus: "dispatching",
+        retryCount: 0,
+        nextRetryAt: null,
+      })
       .where(
         and(
           eq(jobs.id, job.id),

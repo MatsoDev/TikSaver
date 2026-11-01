@@ -5,6 +5,7 @@ import { jobs } from "@/db/schema";
 import { timingSafeEqualString } from "@/lib/auth";
 import { getJob } from "@/lib/jobs";
 import { addLog } from "@/lib/logs";
+import { sendTelegram } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export const dynamic = "force-dynamic";
 const STATUSES = new Set(["success", "failed", "session_expired"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 10 * 60 * 1000;
 
 function authorized(request: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -61,9 +64,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "job not found" }, { status: 404 });
   }
 
+  let retryCount = job.retryCount;
+  let nextRetryAt: Date | null = null;
+  let retryScheduled = false;
+
+  if (status === "success" || status === "session_expired") {
+    retryCount = 0;
+  } else if (job.retryCount < MAX_RETRIES) {
+    retryCount = job.retryCount + 1;
+    nextRetryAt = new Date(Date.now() + RETRY_DELAY_MS);
+    retryScheduled = true;
+  }
+
   await getDb()
     .update(jobs)
-    .set({ lastStatus: status })
+    .set({ lastStatus: status, retryCount, nextRetryAt })
     .where(eq(jobs.id, jobId));
 
   await addLog({
@@ -73,5 +88,22 @@ export async function POST(request: Request) {
     screenshotUrl,
   });
 
-  return NextResponse.json({ ok: true });
+  const label =
+    status === "success"
+      ? "sent"
+      : status === "session_expired"
+        ? "session expired"
+        : "failed";
+
+  const lines = [`Tiksave: ${label} for @${job.targetUsername}`];
+  if (detail) lines.push(detail);
+  if (retryScheduled) {
+    lines.push(`Retry ${retryCount}/${MAX_RETRIES} scheduled in 10 minutes.`);
+  } else if (status === "failed" && retryCount >= MAX_RETRIES) {
+    lines.push("No retries left.");
+  }
+
+  await sendTelegram(lines.join("\n"));
+
+  return NextResponse.json({ ok: true, retryScheduled });
 }

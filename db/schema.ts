@@ -21,6 +21,8 @@ export const jobs = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     lastRunDate: date("last_run_date"),
     lastStatus: text("last_status"),
+    retryCount: integer("retry_count").notNull().default(0),
+    nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

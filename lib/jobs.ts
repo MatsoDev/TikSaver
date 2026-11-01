@@ -47,7 +47,12 @@ export async function deleteJob(id: string): Promise<void> {
 
 export async function setJobStatus(
   id: string,
-  patch: Partial<Pick<NewJob, "lastRunDate" | "lastStatus">>,
+  patch: Partial<
+    Pick<
+      NewJob,
+      "lastRunDate" | "lastStatus" | "retryCount" | "nextRetryAt"
+    >
+  >,
 ): Promise<void> {
   await getDb().update(jobs).set(patch).where(eq(jobs.id, id));
 }
