@@ -1,6 +1,6 @@
 import type { Locator, Page } from "playwright";
 import { humanType, sleep } from "./browser";
-import { MESSAGES_URL, SELECTORS } from "./selectors";
+import { MESSAGES_URL, PROFILE_URL, SELECTORS } from "./selectors";
 import type { SendResult, WorkerJob } from "./types";
 
 async function firstVisible(
@@ -29,7 +29,22 @@ export async function detectSessionExpired(page: Page): Promise<boolean> {
   return false;
 }
 
-async function openConversation(page: Page, username: string): Promise<void> {
+async function openConversationFallback(page: Page, username: string): Promise<void> {
+  await page.goto(MESSAGES_URL, {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000,
+  });
+  await sleep(2500);
+
+  const profileLink = page.locator(SELECTORS.profileDisplayLink.join(",")).filter({
+    hasText: username,
+  }).first();
+  if (await profileLink.isVisible().catch(() => false)) {
+    await profileLink.click();
+    await sleep(1500);
+    return;
+  }
+
   const search = await firstVisible(page, SELECTORS.searchInput);
   if (search) {
     await search.click();
@@ -44,14 +59,28 @@ async function openConversation(page: Page, username: string): Promise<void> {
     return;
   }
 
-  const firstChat = await firstVisible(page, SELECTORS.conversationItem);
-  if (firstChat) {
-    await firstChat.click();
-    await sleep(1500);
+  throw new Error("message button not found");
+}
+
+async function openConversation(page: Page, username: string): Promise<void> {
+  await page.goto(`${PROFILE_URL}${encodeURIComponent(username.replace(/^@/, ""))}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000,
+  });
+  await sleep(2500);
+
+  if (await detectSessionExpired(page)) return;
+
+  const messageButton = await firstVisible(page, SELECTORS.profileMessageButton);
+  if (messageButton) {
+    await messageButton.click();
+    await sleep(1800);
+    const input = await firstVisible(page, SELECTORS.messageInput);
+    if (!input) throw new Error("Could not find the message box");
     return;
   }
 
-  throw new Error("Could not find the conversation");
+  await openConversationFallback(page, username);
 }
 
 async function submitMessage(page: Page, message: string): Promise<void> {
@@ -98,19 +127,6 @@ export async function sendMessage(
   page: Page,
   job: WorkerJob,
 ): Promise<SendResult> {
-  await page.goto(MESSAGES_URL, {
-    waitUntil: "domcontentloaded",
-    timeout: 45_000,
-  });
-  await sleep(2500);
-
-  if (await detectSessionExpired(page)) {
-    return {
-      status: "session_expired",
-      detail: "TikTok asked for a login or captcha. Update the session.",
-    };
-  }
-
   await openConversation(page, job.targetUsername);
 
   if (await detectSessionExpired(page)) {

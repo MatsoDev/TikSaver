@@ -1,4 +1,5 @@
 export const MESSAGES_URL = "https://www.tiktok.com/messages?lang=en";
+export const PROFILE_URL = "https://www.tiktok.com/@";
 
 export const SELECTORS = {
   loginWall: [
@@ -41,5 +42,20 @@ export const SELECTORS = {
     '[data-e2e="message-bubble"]',
     'div[class*="message-content"]',
     'div[class*="MessageContent"]',
+  ],
+  profileReady: [
+    'main',
+    '[data-e2e="user-profile"]',
+  ],
+  profileMessageButton: [
+    'button[data-e2e="message-button"]',
+    'a[data-e2e="message-button"]',
+    'button:has-text("Message")',
+    'a:has-text("Message")',
+  ],
+  profileDisplayLink: [
+    'a[href*="/@"]',
+    '[data-e2e="chat-item"] a[href*="/@"]',
+    '[data-e2e="conversation-item"] a[href*="/@"]',
   ],
 };
