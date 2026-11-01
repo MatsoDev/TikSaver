@@ -1,0 +1,22 @@
+job-fetched
+cookies-loaded
+browser-launched
+[navigation] /messages
+messages-opened
+[navigation] /messages
+[navigation] /messages
+list-loaded
+[navigation] /messages
+[failed-step] browser-launched Error: page.goto: Target page, context or browser has been closed
+page.goto: Target page, context or browser has been closed
+    at <anonymous> (E:\TikSaver\worker\tiktok.ts:90:16)
+    at async openConversation (E:\TikSaver\worker\tiktok.ts:89:3)
+    at async sendMessage (E:\TikSaver\worker\tiktok.ts:158:3)
+    at async main (E:\TikSaver\worker\run.ts:100:20)
+[worker error] Error: page.goto: Target page, context or browser has been closed
+page.goto: Target page, context or browser has been closed
+    at <anonymous> (E:\TikSaver\worker\tiktok.ts:90:16)
+    at async openConversation (E:\TikSaver\worker\tiktok.ts:89:3)
+    at async sendMessage (E:\TikSaver\worker\tiktok.ts:158:3)
+    at async main (E:\TikSaver\worker\run.ts:100:20)
+[screenshot] not captured

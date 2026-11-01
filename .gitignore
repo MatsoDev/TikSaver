@@ -45,3 +45,8 @@ next-env.d.ts
 /worker/node_modules
 /worker/screenshots
 /worker/.env
+/extension/config.local.js
+/worker/logs
+.env.production.local
+
+.vercel

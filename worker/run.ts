@@ -85,11 +85,12 @@ async function main(): Promise<void> {
   };
   let browser: Browser | undefined;
   let page: Page | undefined;
+  let context: Awaited<ReturnType<typeof newContext>> | undefined;
 
   try {
     browser = await launchBrowser();
     mark("browser-launched");
-    const context = await newContext(browser, payload.job.timezone);
+    context = await newContext(browser, payload.job.timezone);
     await context.addCookies(normalizeCookies(payload.cookies));
     page = await context.newPage();
     page.on("framenavigated", (frame) => {
@@ -102,6 +103,16 @@ async function main(): Promise<void> {
     });
 
     const result = await sendMessage(page, job);
+    if (result.status === "success" && context) {
+      const cookies = (await context.cookies("https://www.tiktok.com")).filter((cookie) =>
+        cookie.domain.replace(/^\./, "").endsWith("tiktok.com"),
+      );
+      await fetch(`${appUrl}/api/worker/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
+        body: JSON.stringify({ cookies }),
+      });
+    }
     await report(
       appUrl,
       cronSecret,

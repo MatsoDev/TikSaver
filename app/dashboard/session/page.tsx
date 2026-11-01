@@ -29,7 +29,7 @@ export default async function SessionPage({
             Session stored · {info.cookieCount} cookies
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            Updated {formatTimestamp(info.updatedAt)}
+            Updated {formatTimestamp(info.updatedAt)} · Source {info.source}
           </p>
         </div>
       ) : (

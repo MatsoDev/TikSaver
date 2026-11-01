@@ -38,6 +38,7 @@ export const sessions = pgTable("sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  source: text("source").notNull().default("manual"),
 });
 
 export const logs = pgTable(

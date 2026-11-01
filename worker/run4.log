@@ -1,0 +1,76 @@
+job-fetched
+cookies-loaded
+browser-launched
+[navigation] /messages
+messages-opened
+[navigation] /messages
+[navigation] /messages
+list-loaded
+[navigation] /@salaheldamaty
+[navigation] /@salaheldamaty
+[navigation] /@salaheldamaty
+[failed-step] conversation-opened TimeoutError: locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-presse
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-pressed="false" aria-disabled="false" aria-label="Messages" data-e2e="nav-messages" data-key-interaction="nav_messages" class="TUXButton TUXButton--default TUXButton--medium TUXButton--secondary css-1t1gyuu-7937d88b--StyledTUXNavButton e1o9pl7m0">…</button>
+  - attempting click action
+[failed-step] browser-launched TimeoutError: locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-presse
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-pressed="false" aria-disabled="false" aria-label="Messages" data-e2e="nav-messages" data-key-interaction="nav_messages" class="TUXButton TUXButton--default TUXButton--medium TUXButton--secondary css-1t1gyuu-7937d88b--StyledTUXNavButton e1o9pl7m0">…</button>
+  - attempting click action
+[worker error] TimeoutError: locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-pressed="false" aria-disabled="false" aria-label="Messages" data-e2e="nav-messages" data-key-interaction="nav_messages" class="TUXButton TUXButton--default TUXButton--medium TUXButton--secondary css-1t1gyuu-7937d88b--StyledTUXNavButton e1o9pl7m0">…</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div dir="ltr" class="TUXModal-overlay" data-transition-status="open" data-tux-color-scheme="light">…</div> from <div id=":r3:" data-floating-ui-portal="">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div dir="ltr" class="TUXModal-overlay" data-transition-status="open" data-tux-color-scheme="light">…</div> from <div id=":r3:" data-floating-ui-portal="">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    17 × waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div dir="ltr" class="TUXModal-overlay" data-transition-status="open" data-tux-color-scheme="light">…</div> from <div id=":r3:" data-floating-ui-portal="">…</div> subtree intercepts pointer events
+     - retrying click action
+       - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+    - element is visible, enabled and stable
+    - scrolling into view if needed
+    - done scrolling
+    - <div class="_TUXModal-backdrop _TUXModal-backdrop--exiting"></div> from <div id="tux-portal-container">…</div> subtree intercepts pointer events
+  38 × retrying click action
+       - waiting 500ms
+       - waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div dir="ltr" class="TUXModal-overlay" data-transition-status="open" data-tux-color-scheme="light">…</div> from <div id=":r3:" data-floating-ui-portal="">…</div> subtree intercepts pointer events
+  - retrying click action
+    - waiting 500ms
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('button:has-text("Message")').last()
+    - locator resolved to <button type="button" role="listitem" aria-pressed="false" aria-disabled="false" aria-label="Messages" data-e2e="nav-messages" data-key-interaction="nav_messages" class="TUXButton TUXButton--default TUXButton--medium TUXButton--secondary css-1t1gyuu-7937d88b--StyledTUXNavButton e1o9pl7m0">…</button>
+  - attempting click action
+[screenshot] captured

@@ -7,6 +7,7 @@ export type SessionInfo = {
   id: string;
   updatedAt: Date;
   cookieCount: number;
+  source: string;
 };
 
 type CookieRecord = Record<string, unknown> & { name: string; value: string };
@@ -48,7 +49,7 @@ async function latestSession() {
   return rows[0] ?? null;
 }
 
-export async function saveSession(raw: string): Promise<SessionInfo> {
+export async function saveSession(raw: string, source = "manual"): Promise<SessionInfo> {
   const cookies = parseCookies(raw);
   if (!cookies) {
     throw new Error(
@@ -63,9 +64,9 @@ export async function saveSession(raw: string): Promise<SessionInfo> {
   if (existing) {
     await getDb()
       .update(sessions)
-      .set({ cookiesEncrypted: encrypted, updatedAt: now })
+      .set({ cookiesEncrypted: encrypted, updatedAt: now, source })
       .where(eq(sessions.id, existing.id));
-    return { id: existing.id, updatedAt: now, cookieCount: cookies.length };
+    return { id: existing.id, updatedAt: now, cookieCount: cookies.length, source };
   }
 
   const inserted = await getDb()
@@ -77,6 +78,7 @@ export async function saveSession(raw: string): Promise<SessionInfo> {
     id: inserted[0].id,
     updatedAt: now,
     cookieCount: cookies.length,
+    source,
   };
 }
 
@@ -90,9 +92,10 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       id: row.id,
       updatedAt: row.updatedAt,
       cookieCount: cookies?.length ?? 0,
+      source: row.source,
     };
   } catch {
-    return { id: row.id, updatedAt: row.updatedAt, cookieCount: 0 };
+    return { id: row.id, updatedAt: row.updatedAt, cookieCount: 0, source: row.source };
   }
 }
 
