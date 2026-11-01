@@ -17,8 +17,8 @@ const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 10 * 60 * 1000;
 
 function authorized(request: Request): boolean {
-  const expected = process.env.CRON_SECRET;
-  const provided = request.headers.get("x-cron-secret") ?? "";
+  const expected = process.env.CRON_SECRET?.trim();
+  const provided = request.headers.get("x-cron-secret")?.trim() ?? "";
   if (!expected) return false;
   return timingSafeEqualString(provided, expected);
 }

@@ -15,8 +15,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function authorized(request: Request): boolean {
-  const expected = process.env.CRON_SECRET;
-  const provided = request.headers.get("x-cron-secret") ?? "";
+  const expected = process.env.CRON_SECRET?.trim();
+  const provided = request.headers.get("x-cron-secret")?.trim() ?? "";
   if (!expected) return false;
   return timingSafeEqualString(provided, expected);
 }
