@@ -127,7 +127,11 @@ async function outgoingState(page: Page): Promise<OutgoingState> {
 
 async function submitMessage(page: Page, message: string): Promise<void> {
   console.error("[step] finding composer");
-  const input = await firstVisible(page, SELECTORS.messageInput);
+  let input = await firstVisible(page, SELECTORS.messageInput);
+  for (let wait = 0; !input && wait < 15; wait += 1) {
+    await sleep(1000);
+    input = await firstVisible(page, SELECTORS.messageInput);
+  }
   if (!input) throw new Error("Could not find the message box");
 
   await input.click();
