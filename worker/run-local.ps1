@@ -1,9 +1,10 @@
 $ErrorActionPreference = "Stop"
-$PSScriptRoot | Set-Location
+$workerRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) { "E:\TikSaver\worker" } else { $PSScriptRoot }
+$workerRoot | Set-Location
 $node24 = "C:\Users\Matso.DESKTOP-J9C4R3H\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.20.0-win-x64"
 $env:PATH = "$node24;$env:PATH"
 $appUrl = "https://tiksaver-six.vercel.app"
-$logDir = Join-Path $PSScriptRoot "logs"
+$logDir = Join-Path $workerRoot "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir "local.log"
 function Write-LocalLog([string]$value) { Add-Content -LiteralPath $log -Value ("$(Get-Date -Format o) $value") }
@@ -12,7 +13,7 @@ $jobIndex = 0
 Write-LocalLog "run-start"
 
 try {
-  $cronLine = Get-Content (Join-Path $PSScriptRoot "..\.env.local") | Where-Object { $_ -match '^CRON_SECRET=' } | Select-Object -First 1
+  $cronLine = Get-Content (Join-Path $workerRoot "..\.env.local") | Where-Object { $_ -match '^CRON_SECRET=' } | Select-Object -First 1
   if (-not $cronLine) { throw "CRON_SECRET is missing" }
   $cron = ($cronLine -replace '^CRON_SECRET=', '').Trim().Trim('"').Trim("'").Trim()
   for ($i = 0; $i -lt 18; $i++) {
@@ -30,7 +31,7 @@ try {
     $env:APP_URL = $appUrl
     $env:CRON_SECRET = $cron
     $env:HEADLESS = "true"
-    npx tsx (Join-Path $PSScriptRoot "run.ts") 2>&1 | ForEach-Object {
+    npx tsx (Join-Path $workerRoot "run.ts") 2>&1 | ForEach-Object {
       if ($_ -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or $_ -match '^(success|failed|session_expired)$' -or $_ -match '^\[failed-step\]') {
         Write-LocalLog $_
       }
