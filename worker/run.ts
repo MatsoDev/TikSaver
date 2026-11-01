@@ -54,6 +54,20 @@ async function report(
   await postResult(appUrl, cronSecret, jobId, status, detail, screenshotUrl);
 }
 
+async function isSessionExpired(page: Page): Promise<boolean> {
+  try {
+    const path = new URL(page.url()).pathname.toLowerCase();
+    if (path === "/login" || path.startsWith("/login/")) return true;
+    return await page
+      .locator('input[type="password"], [data-e2e*="captcha"], iframe[src*="captcha"], [class*="captcha" i]')
+      .filter({ visible: true })
+      .count()
+      .then((count) => count > 0);
+  } catch {
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
   let step = "startup";
   const mark = (name: string) => { step = name; console.log(name); };
@@ -139,7 +153,8 @@ async function main(): Promise<void> {
       console.error("[screenshot] no page");
     }
     try {
-      await postResult(appUrl, cronSecret, jobId, "failed", errorDetail(error), screenshotUrl);
+      const detail = page && (await isSessionExpired(page)) ? "session_expired" : errorDetail(error);
+      await postResult(appUrl, cronSecret, jobId, "failed", detail, screenshotUrl);
     } catch (reportError) {
       logError(reportError);
     }
