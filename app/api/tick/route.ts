@@ -34,6 +34,7 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
+  const localExecutor = process.env.EXECUTOR?.trim() === "local";
   const enabledJobs = await getDb()
     .select()
     .from(jobs)
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
   let failed = 0;
 
   for (const job of enabledJobs) {
+    if (localExecutor) continue;
     if (job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime()) {
       const claimedRetry = await getDb()
         .update(jobs)
