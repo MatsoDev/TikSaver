@@ -9,7 +9,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir "local.log"
 
 for ($i = 0; $i -lt 18; $i++) {
-  try { Invoke-WebRequest "$appUrl/api/tick?local=1" -UseBasicParsing -TimeoutSec 10 | Out-Null; break } catch { Start-Sleep -Seconds 10 }
+  try { Invoke-WebRequest "https://www.google.com/generate_204" -UseBasicParsing -TimeoutSec 10 | Out-Null; break } catch { Start-Sleep -Seconds 10 }
 }
 
 $claim = Invoke-RestMethod -Method Post -Uri "$appUrl/api/worker/claim" -Headers @{ "x-cron-secret" = $cron } -ContentType "application/json"
