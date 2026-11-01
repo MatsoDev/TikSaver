@@ -18,16 +18,27 @@ export async function POST(request: Request) {
   const now = new Date();
   const enabledJobs = await getDb().select().from(jobs).where(eq(jobs.enabled, true));
   const claimedIds: string[] = [];
+  const debug = request.headers.get("x-debug") === "1";
+  const debugJobs: Array<{ idSuffix: string; due: boolean; reason: string }> = [];
 
   for (const job of enabledJobs) {
     const zoned = getZonedTime(now, job.timezone);
     const sendMinutes = minutesFromTime(job.sendTime);
     const manual = job.runRequestedAt !== null;
-    if (sendMinutes === null) continue;
-    const due = manual || (job.nextRetryAt
+    if (sendMinutes === null) {
+      if (debug) debugJobs.push({ idSuffix: job.id.slice(-8), due: false, reason: "invalid_send_time" });
+      continue;
+    }
+    const retryWait = Boolean(job.nextRetryAt && job.nextRetryAt.getTime() > now.getTime());
+    const alreadyRan = !manual && job.lastRunDate !== null && job.lastRunDate === zoned.date;
+    const due = manual || (!retryWait && !alreadyRan && (job.nextRetryAt
       ? job.nextRetryAt.getTime() <= now.getTime()
       : (job.lastRunDate === null || job.lastRunDate !== zoned.date) &&
-        zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes));
+        zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes)));
+    if (debug) {
+      const reason = manual ? "run_requested" : retryWait ? "retry_wait" : alreadyRan ? "already_ran_today" : due ? "due" : "not_due_yet";
+      debugJobs.push({ idSuffix: job.id.slice(-8), due, reason });
+    }
     if (!due) continue;
 
     const claimed = await getDb()
@@ -46,5 +57,5 @@ export async function POST(request: Request) {
     if (claimed.length) claimedIds.push(job.id);
   }
 
-  return NextResponse.json({ claimed: claimedIds });
+  return NextResponse.json(debug ? { claimed: claimedIds, jobs: debugJobs } : { claimed: claimedIds });
 }
