@@ -13,6 +13,10 @@ async function marked<T>(name: string, action: () => Promise<T>): Promise<T> {
   } catch (error) {
     const e = error instanceof Error ? error : new Error("Unknown error");
     console.error(`[failed-step] ${name} ${e.name}: ${e.message.slice(0, 200)}`);
+    const diagnostic = error as Error & { listItemCount?: number; displayNames?: string[] };
+    if (diagnostic.listItemCount !== undefined) {
+      console.error(`[conversation-list] items=${diagnostic.listItemCount} names=${JSON.stringify(diagnostic.displayNames ?? [])}`);
+    }
     console.error((e.stack ?? "").split("\n").slice(0, 5).join("\n"));
     throw error;
   }
@@ -45,35 +49,41 @@ export async function detectSessionExpired(page: Page): Promise<boolean> {
 }
 
 async function openConversationFallback(page: Page, username: string): Promise<void> {
-  await page.goto(MESSAGES_URL, {
-    waitUntil: "domcontentloaded",
-    timeout: 45_000,
-  });
-  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
   const target = username.replace(/^@/, "").toLowerCase();
   let items = page.locator(SELECTORS.conversationItem.join(","));
-  for (let wait = 0; wait < 15 && (await items.count().catch(() => 0)) === 0; wait += 1) {
+  const displayName = async (item: Locator) => {
+    const name = (await item.locator("p").first().innerText().catch(() => "")).trim();
+    return name && name.length <= 80 && !/^(loading|\.\.\.|—)$/i.test(name) ? name : "";
+  };
+  const hasNamedItem = async () => {
+    const count = Math.min(await items.count().catch(() => 0), 20);
+    for (let i = 0; i < count; i += 1) {
+      if (await displayName(items.nth(i))) return true;
+    }
+    return false;
+  };
+  for (let wait = 0; wait < 20 && !(await hasNamedItem()); wait += 1) {
     await sleep(1000);
     items = page.locator(SELECTORS.conversationItem.join(","));
   }
-  console.log("list-loaded");
-
-  if (target === "salaheldamaty") {
-    const displayName = page.locator('xpath=/html/body/div[1]/div[2]/div[1]/div/div[4]/div/div/div/div/div[2]/div/div/div/div[1]/div/div[1]/div/div[1]/div[2]/p[2]');
-    if (await displayName.isVisible().catch(() => false)) {
-      await displayName.click({ timeout: 10_000, force: true });
-      for (let wait = 0; wait < 15; wait += 1) {
-        const handle = page.getByText(`@${target}`, { exact: true });
-        if (await handle.isVisible().catch(() => false)) {
-          console.log("conversation-opened");
-          return;
-        }
-        await sleep(500);
-      }
-    }
+  items = page.locator(SELECTORS.conversationItem.join(","));
+  const itemCount = await items.count().catch(() => 0);
+  const displayNames: string[] = [];
+  for (let i = 0; i < Math.min(itemCount, 15); i += 1) {
+    const name = await displayName(items.nth(i));
+    if (name) displayNames.push(name.slice(0, 80));
   }
+  console.log("list-loaded");
+  await page.screenshot({ path: "screenshots/list.png" }).catch(() => undefined);
+  const listContainer = items.first();
+  await listContainer.evaluate((el) => {
+    let node: HTMLElement | null = el as HTMLElement;
+    while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
+    if (node) { node.scrollTop = node.scrollHeight; node.scrollTop = 0; }
+  }).catch(() => undefined);
 
-  for (let index = 0; index < Math.min(await items.count().catch(() => 0), 15); index += 1) {
+  for (let index = 0; index < Math.min(itemCount, 20); index += 1) {
     items = page.locator(SELECTORS.conversationItem.join(","));
     const item = items.nth(index);
     if (!(await item.isVisible().catch(() => false))) continue;
@@ -94,11 +104,11 @@ async function openConversationFallback(page: Page, username: string): Promise<v
       }
       await sleep(500);
     }
-    await page.goto(MESSAGES_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
   }
 
-  throw new Error("message button not found");
+  const error = new Error(itemCount === 0 ? "no_existing_conversation" : "conversation_not_found: no_existing_conversation");
+  Object.assign(error, { listItemCount: itemCount, displayNames });
+  throw error;
 }
 
 async function openConversation(page: Page, username: string): Promise<void> {

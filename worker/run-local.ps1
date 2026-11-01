@@ -32,7 +32,7 @@ try {
     $env:CRON_SECRET = $cron
     $env:HEADLESS = "true"
     npx tsx (Join-Path $workerRoot "run.ts") 2>&1 | ForEach-Object {
-      if ($_ -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or $_ -match '^(success|failed|session_expired)$' -or $_ -match '^\[failed-step\]') {
+      if ($_ -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or $_ -match '^(success|failed|session_expired)$' -or $_ -match '^\[(failed-step|conversation-list|screenshot|worker error)\]') {
         Write-LocalLog $_
       }
     }

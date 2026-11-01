@@ -31,12 +31,12 @@ export async function POST(request: Request) {
       continue;
     }
     const retryWait = Boolean(job.nextRetryAt && job.nextRetryAt.getTime() > now.getTime());
+    const retryDue = Boolean(job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime());
     const alreadyRan = !manual && job.lastRunDate !== null && job.lastRunDate === zoned.date;
-    const pcStartDue = sendMode === "on_pc_start" && !retryWait && !alreadyRan;
-    const due = manual || pcStartDue || (!retryWait && !alreadyRan && (job.nextRetryAt
-      ? job.nextRetryAt.getTime() <= now.getTime()
-      : (job.lastRunDate === null || job.lastRunDate !== zoned.date) &&
-        zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes)));
+    const pcStartDue = sendMode === "on_pc_start" && !job.nextRetryAt && !alreadyRan;
+    const due = manual || retryDue || pcStartDue || (!job.nextRetryAt && !alreadyRan &&
+      (job.lastRunDate === null || job.lastRunDate !== zoned.date) &&
+      zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes));
     if (debug) {
       const reason = manual ? "run_requested" : retryWait ? "retry_wait" : alreadyRan ? "already_ran_today" : due ? "due" : "not_due_yet";
       debugJobs.push({ idSuffix: job.id.slice(-8), due, reason });
@@ -52,8 +52,8 @@ export async function POST(request: Request) {
         manual
           ? isNotNull(jobs.runRequestedAt)
           : job.nextRetryAt
-          ? and(isNotNull(jobs.nextRetryAt), lte(jobs.nextRetryAt, now))
-          : or(isNull(jobs.lastRunDate), ne(jobs.lastRunDate, zoned.date)),
+            ? and(isNotNull(jobs.nextRetryAt), lte(jobs.nextRetryAt, now))
+            : and(isNull(jobs.nextRetryAt), or(isNull(jobs.lastRunDate), ne(jobs.lastRunDate, zoned.date))),
       ))
       .returning({ id: jobs.id });
     if (claimed.length) claimedIds.push(job.id);

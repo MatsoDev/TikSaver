@@ -28,6 +28,13 @@ export const SELECTORS = {
     'div[class*="DivItemContainer"]',
     'a[href*="/messages/"]',
   ],
+  conversationName: [
+    '[data-e2e="inbox-list-item"] p',
+    '[data-e2e="chat-item"] p',
+    '[data-e2e="conversation-item"] p',
+    'div[class*="conversation-item"] p',
+    'div[class*="DivItemContainer"] p',
+  ],
   messageInput: [
     'div[contenteditable="true"][data-placeholder="Send a message..."]',
     '[contenteditable="true"][aria-label="Send a message..."]',
@@ -56,22 +63,9 @@ export const SELECTORS = {
     '[class*="outgoing" i]',
     '[class*="sender" i]',
   ],
-  profileReady: [
-    'main',
-    '[data-e2e="user-profile"]',
-  ],
-  profileMessageButton: [
-    'button[data-e2e="message-button"]',
-    'a[data-e2e="message-button"]',
-  ],
   skeleton: [
     '[class*="skeleton" i]',
     '[class*="Skeleton"]',
     '[aria-busy="true"]',
-  ],
-  profileDisplayLink: [
-    'a[href*="/@"]',
-    '[data-e2e="chat-item"] a[href*="/@"]',
-    '[data-e2e="conversation-item"] a[href*="/@"]',
   ],
 };
