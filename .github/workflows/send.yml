@@ -1,0 +1,59 @@
+name: Send TikTok message
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Tiksave job id
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-${{ inputs.job_id }}
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run worker
+        run: npm run start
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-screenshots-${{ inputs.job_id }}
+          path: worker/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
