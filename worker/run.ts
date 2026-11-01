@@ -15,10 +15,27 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function errorInfo(error: unknown): { name: string; message: string; stack: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name || "Error",
+      message: error.message || "Unknown worker error",
+      stack: error.stack ?? "",
+    };
+  }
+  return { name: "Error", message: "Unknown worker error", stack: "" };
+}
+
 function errorDetail(error: unknown): string {
-  const message =
-    error instanceof Error ? error.message : "Unknown worker error";
-  return message.slice(0, 500);
+  const info = errorInfo(error);
+  return `${info.name}: ${info.message}`.slice(0, 200);
+}
+
+function logError(error: unknown): void {
+  const info = errorInfo(error);
+  const stack = info.stack.split("\n").slice(0, 5).join("\n");
+  console.error(`[worker error] ${info.name}: ${info.message}`);
+  if (stack) console.error(stack);
 }
 
 async function report(
@@ -66,6 +83,14 @@ async function main(): Promise<void> {
     const context = await newContext(browser, payload.job.timezone);
     await context.addCookies(normalizeCookies(payload.cookies));
     page = await context.newPage();
+    page.on("framenavigated", (frame) => {
+      if (frame !== page?.mainFrame()) return;
+      try {
+        console.error(`[navigation] ${new URL(frame.url()).pathname}`);
+      } catch {
+        console.error("[navigation] invalid URL");
+      }
+    });
 
     const result = await sendMessage(page, payload.job);
     await report(
@@ -77,14 +102,24 @@ async function main(): Promise<void> {
       page,
     );
   } catch (error) {
-    await report(
-      appUrl,
-      cronSecret,
-      jobId,
-      "failed",
-      errorDetail(error),
-      page,
-    );
+    logError(error);
+    let screenshotUrl: string | undefined;
+    if (page) {
+      try {
+        screenshotUrl = await captureScreenshot(page, jobId);
+        console.error(`[screenshot] ${screenshotUrl ? "captured" : "not captured"}`);
+      } catch (screenshotError) {
+        logError(screenshotError);
+        console.error("[screenshot] failed");
+      }
+    } else {
+      console.error("[screenshot] no page");
+    }
+    try {
+      await postResult(appUrl, cronSecret, jobId, "failed", errorDetail(error), screenshotUrl);
+    } catch (reportError) {
+      logError(reportError);
+    }
     process.exitCode = 1;
   } finally {
     await browser?.close();
@@ -92,6 +127,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error(errorDetail(error));
+  logError(error);
   process.exit(1);
 });
