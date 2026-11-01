@@ -5,6 +5,19 @@ import type { SendResult, WorkerJob } from "./types";
 
 type OutgoingState = { count: number; lastText: string; lastTimestamp: string };
 
+async function marked<T>(name: string, action: () => Promise<T>): Promise<T> {
+  try {
+    const value = await action();
+    console.log(name);
+    return value;
+  } catch (error) {
+    const e = error instanceof Error ? error : new Error("Unknown error");
+    console.error(`[failed-step] ${name} ${e.name}: ${e.message.slice(0, 200)}`);
+    console.error((e.stack ?? "").split("\n").slice(0, 5).join("\n"));
+    throw error;
+  }
+}
+
 async function firstVisible(
   page: Page,
   selectors: string[],
@@ -43,17 +56,27 @@ async function openConversationFallback(page: Page, username: string): Promise<v
     await sleep(1000);
     items = page.locator(SELECTORS.conversationItem.join(","));
   }
+  console.log("list-loaded");
 
   for (let index = 0; index < Math.min(await items.count().catch(() => 0), 15); index += 1) {
     items = page.locator(SELECTORS.conversationItem.join(","));
-    await items.nth(index).scrollIntoViewIfNeeded().catch(() => undefined);
-    await items.nth(index).click().catch(() => undefined);
+    const item = items.nth(index);
+    if (!(await item.isVisible().catch(() => false))) continue;
+    await item.click({ timeout: 5_000, force: true }).catch(() => undefined);
     for (let wait = 0; wait < 10; wait += 1) {
+      const exactHandle = page.getByText(`@${target}`, { exact: true });
+      if (await exactHandle.isVisible().catch(() => false)) {
+        console.log("conversation-opened");
+        return;
+      }
       const header = await page.locator("header").innerText().catch(() => "");
       const heading = await page.locator("h1,h2,[role=heading]").allInnerTexts().catch(() => []);
       const identity = `${header} ${heading.join(" ")}`;
       const match = identity.match(/@[A-Za-z0-9._-]+/);
-      if (match?.[0].slice(1).toLowerCase() === target) return;
+      if (match?.[0].slice(1).toLowerCase() === target) {
+        console.log("conversation-opened");
+        return;
+      }
       await sleep(500);
     }
     await page.goto(MESSAGES_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
@@ -68,6 +91,7 @@ async function openConversation(page: Page, username: string): Promise<void> {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
+  console.log("messages-opened");
   await openConversationFallback(page, username).catch(async () => {
     await page.goto(`${PROFILE_URL}${encodeURIComponent(username.replace(/^@/, ""))}`, {
       waitUntil: "domcontentloaded",
@@ -98,7 +122,7 @@ async function outgoingState(page: Page): Promise<OutgoingState> {
     })),
   ).catch(() => [] as { text: string; timestamp: string }[]);
   const last = rows.at(-1);
-  return { count: rows.length, lastText: last?.text ?? "", lastTimestamp: last?.timestamp ?? "" };
+  return { count: rows.length, lastText: last?.text ?? "", lastTimestamp: last?.timestamp ?? `observed-${rows.length}` };
 }
 
 async function submitMessage(page: Page, message: string): Promise<void> {
@@ -107,21 +131,15 @@ async function submitMessage(page: Page, message: string): Promise<void> {
   if (!input) throw new Error("Could not find the message box");
 
   await input.click();
-  console.error("[step] clicked composer");
+  console.log("composer-clicked");
   await sleep(400);
   await humanType(page, message);
-  console.error("[step] typed message");
+  console.log("typed");
   await sleep(500);
 
   await page.screenshot({ path: "screenshots/before-send.png" });
-  const sendButton = await firstVisible(page, SELECTORS.sendButton);
-  if (sendButton) {
-    await sendButton.click();
-    console.error("[step] clicked send");
-  } else {
-    await page.keyboard.press("Enter");
-    console.error("[step] pressed Enter");
-  }
+  await page.keyboard.press("Enter");
+  console.log("sent");
   await page.screenshot({ path: "screenshots/after-send.png" });
 }
 
@@ -143,7 +161,7 @@ export async function sendMessage(
   page: Page,
   job: WorkerJob,
 ): Promise<SendResult> {
-  await openConversation(page, job.targetUsername);
+  await marked("conversation-opened", () => openConversation(page, job.targetUsername));
 
   if (await detectSessionExpired(page)) {
     return {
@@ -164,6 +182,7 @@ export async function sendMessage(
   }
 
   if (await verifyMessage(page, job.message, before)) {
+    console.log("verified");
     return { status: "success", detail: "Message sent and verified." };
   }
 

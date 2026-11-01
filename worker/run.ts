@@ -55,6 +55,8 @@ async function report(
 }
 
 async function main(): Promise<void> {
+  let step = "startup";
+  const mark = (name: string) => { step = name; console.log(name); };
   const appUrl = requireEnv("APP_URL").replace(/\/+$/, "");
   const cronSecret = requireEnv("CRON_SECRET");
   const jobId = process.env.JOB_ID ?? process.argv[2];
@@ -64,6 +66,7 @@ async function main(): Promise<void> {
   const response = await fetch(`${appUrl}/api/worker/job/${jobId}`, {
     headers: { "x-cron-secret": cronSecret },
   });
+  mark("job-fetched");
 
   if (!response.ok) {
     const reason =
@@ -75,11 +78,13 @@ async function main(): Promise<void> {
   }
 
   const payload = (await response.json()) as JobPayload;
+  mark("cookies-loaded");
   let browser: Browser | undefined;
   let page: Page | undefined;
 
   try {
     browser = await launchBrowser();
+    mark("browser-launched");
     const context = await newContext(browser, payload.job.timezone);
     await context.addCookies(normalizeCookies(payload.cookies));
     page = await context.newPage();
@@ -102,6 +107,9 @@ async function main(): Promise<void> {
       page,
     );
   } catch (error) {
+    const info = errorInfo(error);
+    console.error(`[failed-step] ${step} ${info.name}: ${info.message.slice(0, 200)}`);
+    console.error(info.stack.split("\n").slice(0, 5).join("\n"));
     logError(error);
     let screenshotUrl: string | undefined;
     if (page) {
