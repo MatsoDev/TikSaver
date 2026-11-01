@@ -1,5 +1,4 @@
 export const MESSAGES_URL = "https://www.tiktok.com/messages?lang=en";
-export const PROFILE_URL = "https://www.tiktok.com/@";
 
 export const SELECTORS = {
   loginWall: [

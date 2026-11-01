@@ -1,6 +1,6 @@
 import type { Locator, Page } from "playwright";
 import { humanType, sleep } from "./browser";
-import { MESSAGES_URL, PROFILE_URL, SELECTORS } from "./selectors";
+import { MESSAGES_URL, SELECTORS } from "./selectors";
 import type { SendResult, WorkerJob } from "./types";
 
 type OutgoingState = { count: number; lastText: string; lastTimestamp: string };
@@ -92,23 +92,44 @@ async function openConversation(page: Page, username: string): Promise<void> {
     timeout: 45_000,
   });
   console.log("messages-opened");
-  await openConversationFallback(page, username).catch(async () => {
-    await page.goto(`${PROFILE_URL}${encodeURIComponent(username.replace(/^@/, ""))}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 45_000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-    for (let wait = 0; wait < 15; wait += 1) {
-      const messageButton = await firstVisible(page, SELECTORS.profileMessageButton);
-      if (messageButton) {
-        await messageButton.click();
-        await sleep(1200);
-        return;
-      }
+  await openConversationFallback(page, username);
+}
+
+async function findComposer(page: Page): Promise<Locator | null> {
+  const candidates = [
+    page.getByPlaceholder("Send a message...", { exact: true }),
+    page.locator('main [contenteditable="true"], [role="main"] [contenteditable="true"]'),
+    page.getByRole("textbox"),
+    page.locator("textarea"),
+  ];
+  for (const candidate of candidates) {
+    for (let wait = 0; wait < 10; wait += 1) {
+      const visible = candidate.last();
+      if (await visible.isVisible().catch(() => false)) return visible;
       await sleep(1000);
     }
-    throw new Error("message button not found");
-  });
+  }
+  const panels = page.locator('main, [role="main"]').last();
+  await panels.evaluate((el) => (el.scrollTop = el.scrollHeight)).catch(() => undefined);
+  for (const candidate of candidates) {
+    const visible = candidate.last();
+    if (await visible.isVisible().catch(() => false)) return visible;
+  }
+  await page.screenshot({ path: "screenshots/composer-missing.png" }).catch(() => undefined);
+  const candidatesAtBottom = await page.locator("body *").evaluateAll((elements) =>
+    elements.filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > window.innerHeight - 150 && r.top < window.innerHeight;
+    }).slice(-15).map((el) => ({
+      tag: el.tagName,
+      role: el.getAttribute("role") ?? "",
+      placeholder: el.getAttribute("placeholder") ?? "",
+      aria: el.getAttribute("aria-label") ?? "",
+      contenteditable: el.getAttribute("contenteditable") ?? "",
+    })),
+  ).catch(() => []);
+  console.error(`[composer-candidates] ${JSON.stringify(candidatesAtBottom)}`);
+  return null;
 }
 
 async function outgoingState(page: Page): Promise<OutgoingState> {
@@ -127,11 +148,7 @@ async function outgoingState(page: Page): Promise<OutgoingState> {
 
 async function submitMessage(page: Page, message: string): Promise<void> {
   console.error("[step] finding composer");
-  let input = await firstVisible(page, SELECTORS.messageInput);
-  for (let wait = 0; !input && wait < 15; wait += 1) {
-    await sleep(1000);
-    input = await firstVisible(page, SELECTORS.messageInput);
-  }
+  const input = await findComposer(page);
   if (!input) throw new Error("Could not find the message box");
 
   await input.click();
