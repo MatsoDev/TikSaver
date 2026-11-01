@@ -1,311 +1,156 @@
 # Tiksave
 
-A single-user TikTok streak saver. Tiksave sends a preset message to one chosen
-TikTok contact at a daily time you choose, even when your phone or laptop is off.
+Tiksave is a private, single-user app for scheduling a daily TikTok direct message to a chosen contact. It includes an admin dashboard, an encrypted TikTok session store, a Windows PC worker, and Telegram status alerts.
 
-> Automated messaging may violate TikTok's terms of service. This project is for
-> personal use, with your own account, and comes with no guarantees. TikTok can
-> change its UI or invalidate your session at any time.
+> Use only with an account and contacts you are authorized to message. TikTok may change its interface, expire sessions, or restrict automated activity.
 
-## How it works
+## Production overview
 
-1. **Vercel** hosts the Next.js 14 admin UI and API.
-2. **cron-job.org** calls `GET /api/tick` once a minute with an
-   `x-cron-secret` header.
-3. `/api/tick` finds jobs that are due in their own timezone (plus a
-   deterministic per-day jitter) and atomically claims them so a job can never
-   send twice on the same local day.
-4. The claimed job triggers the **GitHub Actions** workflow `send.yml` with the
-   job id.
-5. The workflow runs the **Playwright worker** in `/worker`. The worker fetches
-   the job and decrypted cookies from `/api/worker/job/[id]`, opens TikTok
-   messages, finds the conversation, types the message with human-like delays,
-   sends it, and verifies it appears.
-6. The worker posts the result to `/api/worker/result`, which writes a log and
-   sends a **Telegram** notification. Failures are retried up to two times,
-   ten minutes apart, through the tick endpoint.
-7. Screenshots are saved on failure and shown in the logs page.
+- **Web app:** Next.js dashboard and API deployed on Vercel.
+- **Database:** Neon Postgres, accessed with Drizzle ORM.
+- **Local sender:** a Windows Scheduled Task runs Playwright on the user's PC. Chrome does not need to be open for a send; the worker uses the encrypted session stored by Tiksave.
+- **Session refresh:** the unpacked Chrome extension periodically visits TikTok Messages in a background tab, then syncs the current TikTok cookies to the app. It also syncs after TikTok cookie changes.
+- **Scheduler and fallback alerts:** cron-job.org calls `/api/tick` every minute. With `EXECUTOR=local`, scheduled sends stay on the PC while the API continues checking reminder deadlines.
+- **Notifications:** Telegram reports run status and can alert when the browser session is logged out.
 
-The scheduling device does not need to be online: the schedule lives in Neon,
-the trigger lives in cron-job.org, and the browser lives in GitHub Actions.
+The production app is [tiksaver-six.vercel.app](https://tiksaver-six.vercel.app). Keep all credentials in local ignored configuration or the relevant service's secret store.
 
-## Stack
+## Daily send behavior
 
-| Layer      | Choice                                              |
-| ---------- | --------------------------------------------------- |
-| App        | Next.js 14 (App Router), TypeScript, Tailwind CSS    |
-| Database   | Neon Postgres + `drizzle-orm` (`neon-http` driver)   |
-| Worker     | Node + Playwright in `/worker`, GitHub Actions       |
-| Scheduler  | cron-job.org -> `GET /api/tick`                      |
-| Alerts     | Telegram Bot API                                     |
+With `EXECUTOR=local` and the default `SEND_MODE`, the PC worker claims enabled jobs that have not been sent on the current date in each job's timezone. It does not wait for `send_time` to send. The configured send time remains useful as the reference for unsent-job reminders. A job is claimed atomically, so overlapping task runs do not send it twice for the same local date. **Send now** queues that job for the PC and is eligible immediately.
 
-## Project layout
+When the PC is off, scheduled jobs wait. Turn on the PC and sign in to Windows; the Scheduled Task runs at logon and repeats every five minutes while the user session is active. The task does not wake or power on the PC. A missed send can produce a Telegram reminder while the PC is off.
 
-```
-app/                 Next.js pages and API routes
-  api/tick           cron entrypoint
-  api/worker/job     job + cookies for the worker
-  api/worker/result  worker result ingestion
-  dashboard          jobs, logs and session UI
-db/                  Drizzle schema and lazy Neon client
-drizzle/             generated SQL migrations
-lib/                 auth, crypto, GitHub, Telegram, time and job helpers
-worker/              Playwright worker (separate npm project)
-  selectors.ts       every TikTok selector in one place
-.github/workflows/   send.yml worker workflow
+## Repository map
+
+```text
+app/                    Next.js pages, dashboard and API routes
+  api/tick/             cron entry point and reminder checks
+  api/worker/claim/     local worker queue claim endpoint
+  api/worker/job/       protected job and session retrieval
+  api/worker/result/    worker result and run log ingestion
+  api/session/          encrypted cookie ingestion and session status
+  dashboard/            jobs, logs and session pages
+db/                     Drizzle schema and database client
+drizzle/                SQL migrations and migration metadata
+extension/              Manifest V3 Tiksave cookie sync extension
+worker/                 Playwright sender and Windows local runner
+  selectors.ts          TikTok UI selectors
+  run-local.ps1         claims and runs jobs on this PC
+.github/workflows/      optional GitHub Actions worker workflow
 ```
 
-## Setup
+## Configuration
 
-### 1. Create the Neon database
+### Vercel production variables
 
-1. Create a project at [neon.tech](https://neon.tech).
-2. Copy the **pooled** connection string. It looks like
-   `postgres://user:password@ep-...-pooler.region.aws.neon.tech/db?sslmode=require`.
-3. Locally, create `.env.local` from `.env.example` and set `DATABASE_URL`.
-4. Apply the migrations:
+Set secrets in Vercel Project Settings → Environment Variables. Do not put real values in this document or commit them.
 
-   ```bash
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Neon pooled Postgres connection string. |
+| `ADMIN_PASSWORD` | Password for the dashboard. |
+| `ENCRYPTION_KEY` | Base64-encoded 32-byte key used to encrypt stored TikTok cookies. Keep it stable. |
+| `CRON_SECRET` | Shared secret for cron and worker API authentication. |
+| `EXECUTOR` | Set to `local` to keep scheduled sends on the PC. |
+| `SEND_MODE` | Optional; `on_pc_start` sends each enabled job once per local date when claimed. With local execution this is the default. |
+| `GITHUB_TOKEN`, `GITHUB_REPO` | Optional GitHub dispatch configuration for the Actions executor. |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram delivery configuration. |
+| `EXTENSION_TOKEN` | Secret used by the browser extension to authenticate session sync. |
+
+The production cron request is `GET https://tiksaver-six.vercel.app/api/tick` with header `x-cron-secret` set to the same `CRON_SECRET`. Configure cron-job.org to call it every minute. `/api/tick` continues reminder checks when local execution is enabled.
+
+### Local app development
+
+1. Install Node.js 24 and clone the repository.
+2. Copy `.env.example` to `.env.local` and fill in development values. Keep `.env.local` private.
+3. Install dependencies and migrate the database:
+
+   ```powershell
    npm install
    npm run db:migrate
+   npm run dev
    ```
 
-   `npm run db:generate` creates new SQL migrations after schema changes.
-   `npm run db:push` is a dev-only shortcut that skips migration files.
+4. The browser worker has its own package manifest under `worker/`; install its dependencies there when developing the worker.
 
-### 2. Deploy to Vercel and connect the GitHub repo
+For production schema changes, create a Drizzle migration, review it, and apply it to the intended Neon database before relying on the new schema. Vercel builds do not automatically apply migrations.
 
-1. Push this repository to GitHub (it already lives at
-   `https://github.com/MatsoDev/TikSaver`).
-2. In Vercel, **Add New -> Project -> Import Git Repository**, choose the repo
-   and the `main` branch. The framework preset is detected as Next.js.
-3. Add the environment variables below for **Production** (and Preview if you
-   want preview deployments to work).
-4. Deploy. Vercel redeploys automatically on every push to `main` because the
-   repo is connected to the project.
-5. Run `npm run db:migrate` locally (with the production `DATABASE_URL`) to
-   apply migrations. Vercel builds do not run migrations.
+## Windows PC executor
 
-Vercel environment variables:
+The supported local runner is `worker/run-local.ps1`. It reads `CRON_SECRET` from the repository `.env.local`, uses the configured production app URL, claims eligible jobs from `/api/worker/claim`, and launches the worker sequentially. The local log is `worker/logs/local.log`; it records execution markers and statuses, not message contents, cookies, or credentials. Treat logs and screenshots as private operational data.
 
-| Variable             | Value                                                        |
-| -------------------- | ------------------------------------------------------------ |
-| `DATABASE_URL`       | Neon pooled connection string.                               |
-| `ADMIN_PASSWORD`     | The password you will type on `/login`.                      |
-| `ENCRYPTION_KEY`     | 32 random bytes, base64. Encrypts cookies and signs sessions. |
-| `CRON_SECRET`        | A long random string. Also used by the worker.               |
-| `GITHUB_TOKEN`       | Fine-grained token with `Actions: write` on this repo.       |
-| `GITHUB_REPO`        | `MatsoDev/TikSaver`.                                         |
-| `TELEGRAM_BOT_TOKEN` | From @BotFather.                                             |
-| `TELEGRAM_CHAT_ID`   | Your chat id with the bot.                                   |
+The Scheduled Task is named **Tiksave** and is intended to run as the current Windows user, at sign-in and on a five-minute repeat while that session is active. It does not use a startup trigger or wake the PC.
 
-Generate the encryption key with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-The same `ENCRYPTION_KEY` is used for AES-256-GCM cookie encryption and for
-signing the admin session cookie. Keep it stable: changing it logs you out and
-makes stored cookies unreadable, so you must upload the TikTok cookies again.
-
-### 3. Create the GitHub token
-
-1. GitHub **Settings -> Developer settings -> Personal access tokens ->
-   Fine-grained tokens -> Generate new token**.
-2. Repository access: only `MatsoDev/TikSaver`.
-3. Repository permissions: **Actions: Read and write** (needed to dispatch the
-   workflow), **Contents: Read** (metadata), **Metadata: Read** (mandatory).
-4. Copy the token into Vercel as `GITHUB_TOKEN`. Never commit it.
-
-Make sure Actions are enabled for the repository. The workflow
-`.github/workflows/send.yml` accepts a `job_id` input.
-
-### 4. Add GitHub Actions secrets
-
-In the GitHub repo: **Settings -> Secrets and variables -> Actions -> New
-repository secret**:
-
-| Secret        | Value                                                     |
-| ------------- | --------------------------------------------------------- |
-| `APP_URL`     | Your deployment URL, for example `https://tiksave.vercel.app`. |
-| `CRON_SECRET` | Exactly the same value as the Vercel `CRON_SECRET`.        |
-
-The worker uses these to call the protected job and result endpoints. The
-workflow does not need `DATABASE_URL` or any TikTok credentials; cookies are
-fetched from the app at run time.
-
-### 5. Set up cron-job.org
-
-1. Create a free account at [cron-job.org](https://cron-job.org).
-2. Create a cron job:
-   - URL: `https://<your-app>.vercel.app/api/tick`
-   - Schedule: every 1 minute.
-   - Enable **Custom headers** and add `x-cron-secret` with the value of
-     `CRON_SECRET`.
-   - Method: `GET`.
-3. Save and run it once manually. A `200` with JSON like
-   `{"ok":true,"checked":0,"dispatched":0,"failed":0}` means it works.
-
-If the secret is wrong the endpoint returns `401`; if `CRON_SECRET` is missing
-on the server it returns `500`.
-
-### 6. Create the Telegram bot
-
-1. Open [@BotFather](https://t.me/BotFather) in Telegram, send `/newbot`, pick a
-   name and a username. Copy the token into `TELEGRAM_BOT_TOKEN`.
-2. Open your new bot and press **Start**, or send it any message.
-3. Find your chat id by opening
-   `https://api.telegram.org/bot<TOKEN>/getUpdates` and reading
-   `result[0].message.chat.id`. Put it in `TELEGRAM_CHAT_ID`.
-4. For a group, add the bot to the group, send a message, and use the negative
-   group id from `getUpdates`.
-
-Notifications contain the job id, the target username and a generic status
-detail. They never contain cookies or message contents.
-
-### 7. Export TikTok cookies
-
-1. Log in to [tiktok.com](https://www.tiktok.com) in a desktop browser.
-2. Install a cookie export extension, for example **Cookie-Editor** or
-   **EditThisCookie**.
-3. On `tiktok.com`, open the extension and export/ copy the cookies as JSON.
-   The result must be an array of objects with `name`, `value`, `domain`, and
-   optionally `path`, `expires`, `httpOnly`, `secure`, `sameSite`.
-4. In Tiksave open **Session**, paste the JSON and save. Only the cookies array
-   is kept, encrypted with AES-256-GCM.
-5. A Playwright storage state file (`{"cookies":[...],"origins":[...]}`) is also
-   accepted.
-
-Sessions expire. When Telegram reports **session expired**, export fresh
-cookies and save them again. TikTok may also show a captcha; the worker treats
-that as `session_expired` and does not retry.
-
-## Using Tiksave
-
-1. Open `/login` and enter `ADMIN_PASSWORD`.
-2. Create a job: username (without `@`), message, send time in `HH:MM`, IANA
-   timezone (default `Africa/Cairo`) and jitter in minutes.
-3. Use **Send now** to test the whole pipeline without waiting for the schedule.
-4. Watch **Logs** for statuses and failure screenshots.
-
-### Sending rules
-
-- A job sends when the local time in its timezone is at or after
-  `send_time + jitter`.
-- Jitter is deterministic per job per local date, so retries of `/api/tick`
-  within the same minute cannot change the target time.
-- `last_run_date` is set atomically with an `UPDATE ... WHERE` before dispatch,
-  which makes the tick idempotent even if cron calls it concurrently.
-- A failed worker run schedules up to **2 retries, 10 minutes apart**. Retries
-  are claimed atomically by the same tick endpoint. `session_expired` is never
-  retried.
-- A GitHub dispatch failure is logged and is not retried automatically. Use
-  **Send now** after fixing `GITHUB_TOKEN` / `GITHUB_REPO`.
-- Disabling a job stops both scheduled sends and pending retries.
-
-## Local development
-
-```bash
-npm install
-cp .env.example .env.local   # fill in the values
-npm run db:migrate
-npm run dev
-```
-
-Open http://localhost:3000. Useful checks:
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-cd worker && npm install && npm run typecheck
-```
-
-Test the tick endpoint locally:
-
-```bash
-curl -H "x-cron-secret: $CRON_SECRET" http://localhost:3000/api/tick
-```
-
-Run the worker locally (requires a public app URL reachable from your machine):
+Useful PowerShell commands:
 
 ```powershell
-cd worker
-$env:JOB_ID="<job uuid>"
-$env:APP_URL="https://your-app.vercel.app"
-$env:CRON_SECRET="..."
-npm run start
+Start-ScheduledTask -TaskName Tiksave
+Get-ScheduledTask -TaskName Tiksave
+Get-ScheduledTaskInfo -TaskName Tiksave
+Disable-ScheduledTask -TaskName Tiksave
+Enable-ScheduledTask -TaskName Tiksave
 ```
 
-## Security and privacy
+To change a job's timezone or reminder reference time, edit that job in the dashboard. In `on_pc_start` mode, the send time does not delay the local send; the local date, enabled state, retry state, and manual queue determine eligibility.
 
-- The admin session is an HMAC-signed, `httpOnly`, `SameSite=Lax` cookie with a
-  30-day expiry. Middleware protects `/dashboard` and all `/api/*` routes except
-  `/api/tick`, `/api/worker/*` and `/api/auth/login`.
-- `/api/tick` and `/api/worker/*` authenticate with `x-cron-secret`, compared in
-  constant time.
-- TikTok cookies are encrypted at rest with AES-256-GCM. The encryption key never
-  leaves the server environment.
-- Cookies and message contents are never logged. Logs store only job ids,
-  statuses, generic details and optional screenshots. Telegram messages do not
-  include message contents.
-- `.env`, `.env.*` (except `.env.example`), cookie files and screenshots are
-  gitignored.
+## Chrome extension: automatic session refresh
+
+The extension is a Manifest V3 unpacked extension; it is not distributed through a store.
+
+1. Ensure the local-only `extension/config.local.js` exists and points to the production app with the extension token. This file is gitignored; never commit or share it.
+2. In Chrome, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the repository's `extension` folder.
+3. Leave Chrome running. The extension schedules a background visit after install/reload, on Chrome startup, and every four hours. If a TikTok tab is already open, it syncs cookies without opening another tab. Visits are limited by a three-hour cooldown.
+4. Cookie changes also trigger a debounced sync, and a periodic sync runs every 30 minutes. A successful sync updates the extension badge and the dashboard Session page.
+5. If TikTok redirects the background tab to `/login` or the session cookie is absent, the extension does not upload cookies. It marks the session logged out and the app sends at most one Telegram alert per 12 hours.
+
+The Session page shows the last extension sync, last background visit, and the session source. If a session is logged out, sign in to TikTok in Chrome; the extension will detect the updated cookies and sync them. The user does not need to open TikTok solely to keep the session refreshed.
+
+After pulling an extension code update, open `chrome://extensions` and click **Reload** on Tiksave. Do not paste cookies into chat, source files, or Git.
+
+## Dashboard workflow
+
+1. Sign in at `/login` using `ADMIN_PASSWORD`.
+2. On Jobs, configure a target username, message, timezone, reminder time, and whether the job is enabled.
+3. Use **Send now** to queue a manual run. With local execution, the dashboard indicates that the job is queued for the PC.
+4. Check Logs for the worker result and Telegram status. A success is recorded only after the worker reports a verified send.
+5. Check Session to review the latest cookie sync and background visit.
+
+## GitHub Actions executor (optional)
+
+The repository retains `.github/workflows/send.yml` for deployments that use GitHub Actions as the worker. The local executor is the production configuration described above. To use GitHub dispatch instead, configure the GitHub token/repository variables and the workflow's `APP_URL` and `CRON_SECRET` secrets, and remove the local executor setting. Do not enable two schedulers for the same jobs without understanding the shared claim semantics.
+
+## Security and operational notes
+
+- TikTok cookies are encrypted at rest with AES-256-GCM. The encryption key must remain stable; replacing it makes existing encrypted cookies unreadable.
+- Worker and extension endpoints authenticate with dedicated secrets. The extension token is separate from the cron secret.
+- Never commit `.env.local`, `extension/config.local.js`, browser cookie exports, screenshots, local worker logs, or service tokens.
+- Run logs should contain status and sanitized diagnostics only. Never add cookie values, credentials, or message text to logs.
+- Keep the PC account and Chrome profile private. Anyone who can access the Windows profile may be able to run the local worker or inspect the active browser session.
 
 ## Troubleshooting
 
-| Symptom                             | Likely fix                                                        |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `/api/tick` returns `401`           | `x-cron-secret` does not match `CRON_SECRET`.                     |
-| `/api/tick` returns `500`           | `CRON_SECRET` is not set in Vercel.                               |
-| Jobs never dispatch                 | `GITHUB_TOKEN` lacks `Actions: write`, or `GITHUB_REPO` is wrong. |
-| Workflow starts but the worker fails | `APP_URL` or `CRON_SECRET` GitHub secrets are wrong.              |
-| `session_expired`                   | Re-export TikTok cookies and save them in **Session**.            |
-| Message sent but unverified         | TikTok changed its DOM; update `worker/selectors.ts`.              |
-| No Telegram messages                | Bot token/chat id are wrong, or you never messaged the bot first. |
+| Symptom | Check |
+| --- | --- |
+| Dashboard says server is not configured | Confirm required Production variables exist in Vercel and redeploy after changing them. |
+| `/api/tick` returns `401` | Verify cron-job.org's `x-cron-secret` matches Vercel `CRON_SECRET`. |
+| Local task claims no jobs | Check enabled state, last run date in the job timezone, retry timing, queued manual run, and `worker/logs/local.log`. |
+| No local run appears | Confirm the Tiksave Scheduled Task is enabled and the Windows user is signed in. |
+| Extension badge shows an error | Check `extension/config.local.js`, reload the extension, and inspect its service-worker console without copying secrets into logs. |
+| Session is logged out | Sign in to TikTok in Chrome and allow the extension to sync; inspect the Session page afterward. |
+| Worker cannot find a conversation | The account must have an existing conversation with that username; inspect the sanitized failure details and screenshot. |
+| Telegram alert is missing | Confirm the bot token/chat id in Vercel and start a conversation with the bot. Review the run's Telegram delivery status. |
 
-## Decisions
+## Development checks
 
-- **Next.js pinned to 14.2.35**, the latest patched 14.x release.
-- **Neon HTTP driver** so the same database client works on Vercel and from the
-  worker's Node process without connection pooling issues.
-- **Lazy database initialization** keeps builds working without secrets.
-- **HMAC-signed stateless session cookie** avoids an extra session table for a
-  single-user app.
-- **`send_time` as `HH:MM` text** plus an explicit IANA timezone keeps the
-  user's wall-clock intent clear.
-- **Deterministic jitter** prevents double sends while still avoiding an
-  exact-time pattern.
-- **Atomic claim via `UPDATE ... WHERE ... RETURNING`** is the idempotency
-  primitive; no long transactions are held while GitHub is called.
-- **Retry state on `jobs`** (`retry_count`, `next_retry_at`) keeps retries
-  visible to the tick endpoint without an extra queue table.
-- **Screenshots stored as base64 data URLs** in `logs.screenshot_url` (max
-  ~1.5 MB) and served through `/api/logs/[id]/screenshot`. This avoids adding a
-  blob-storage provider for a single-user app. The worker also writes local
-  copies to `worker/screenshots`, uploaded as a GitHub Actions artifact.
-- **Selectors isolated in `worker/selectors.ts`** so TikTok UI changes are a
-  one-file fix.
+```powershell
+npm run typecheck
+npm run lint
+npm run build
+Push-Location worker
+npm run typecheck
+Pop-Location
+node --check extension/service-worker.js
+```
 
-## Project status
-
-- Step 1 - scaffold, Tailwind, Drizzle schema and initial migration.
-- Step 2 - password auth, signed cookie, middleware, AES-256-GCM helpers.
-- Step 3 - dashboard, job CRUD, encrypted session upload, logs.
-- Step 4 - idempotent `/api/tick` with timezone-aware jitter.
-- Step 5 - Playwright worker, protected worker endpoints, Actions workflow.
-- Step 6 - Telegram notifications and tick-driven retries.
-- Step 7 - documentation.
-
-## Local executor + cookie sync
-
-When `EXECUTOR=local`, `/api/tick` keeps reminders active but leaves scheduled
-claims to `POST /api/worker/claim`. `worker/run-local.ps1` claims due jobs and
-runs the Playwright worker on the logged-in Windows PC. Change the job's send
-time and timezone in the dashboard; disable the local task with
-`Disable-ScheduledTask -TaskName Tiksave`.
-
-Load `extension/` unpacked at `chrome://extensions` with Developer mode enabled.
-The extension syncs TikTok cookies every 30 minutes and after cookie changes;
-`extension/config.local.js` is local-only and ignored by Git.
+Run checks relevant to a change before committing. Do not run production sends as a code test.
