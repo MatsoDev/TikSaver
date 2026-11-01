@@ -5,6 +5,7 @@ const PUBLIC_API = [
   /^\/api\/tick$/,
   /^\/api\/worker(\/|$)/,
   /^\/api\/session\/ingest$/,
+  /^\/api\/session\/ingest-status$/,
   /^\/api\/auth\/login$/,
 ];
 

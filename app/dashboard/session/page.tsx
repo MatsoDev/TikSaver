@@ -1,5 +1,5 @@
 import { formatTimestamp } from "@/lib/time";
-import { getSessionInfo } from "@/lib/session-store";
+import { getExtensionSessionInfo, getSessionInfo } from "@/lib/session-store";
 import { deleteSessionAction, saveSessionAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,10 @@ export default async function SessionPage({
 }: {
   searchParams: { error?: string; saved?: string; deleted?: string };
 }) {
-  const info = await getSessionInfo();
+  const [info, extensionInfo] = await Promise.all([
+    getSessionInfo(),
+    getExtensionSessionInfo(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -23,7 +26,7 @@ export default async function SessionPage({
         </p>
       </header>
 
-      {info ? (
+      {info && info.cookieCount > 0 ? (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
           <p className="text-sm text-zinc-300">
             Session stored · {info.cookieCount} cookies
@@ -34,9 +37,15 @@ export default async function SessionPage({
         </div>
       ) : (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          No session stored yet. Sends will fail until you add cookies.
+          No active TikTok session. Log in to TikTok in Chrome or add cookies.
         </p>
       )}
+
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm text-zinc-300">
+        <p>Last extension sync: {extensionInfo?.lastExtensionSyncAt ? formatTimestamp(extensionInfo.lastExtensionSyncAt) : "Never"}</p>
+        <p className="mt-1">Last background visit: {extensionInfo?.lastBackgroundVisitAt ? formatTimestamp(extensionInfo.lastBackgroundVisitAt) : "Never"}</p>
+        <p className="mt-1">Session status: {extensionInfo?.sessionStatus ?? "unknown"} · Source: {info?.source ?? "none"}</p>
+      </div>
 
       {searchParams.saved ? (
         <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">

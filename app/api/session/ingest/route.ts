@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqualString } from "@/lib/auth";
-import { saveSession } from "@/lib/session-store";
+import { recordExtensionSync, saveSession } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +42,14 @@ export async function POST(request: Request) {
   if (!cookies.some((cookie) => cookie.name === "sessionid")) {
     return json(request, { error: "sessionid required" }, 400);
   }
+  let backgroundVisitAt: Date | undefined;
+  if (body.backgroundVisitAt !== undefined) {
+    if (typeof body.backgroundVisitAt !== "string" || !Number.isFinite(Date.parse(body.backgroundVisitAt))) {
+      return json(request, { error: "invalid background visit timestamp" }, 400);
+    }
+    backgroundVisitAt = new Date(body.backgroundVisitAt);
+  }
   await saveSession(JSON.stringify(cookies), "extension");
+  await recordExtensionSync(backgroundVisitAt);
   return json(request, { ok: true });
 }

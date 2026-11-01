@@ -29,6 +29,20 @@
       "when": 1793543129710,
       "tag": "0003_lively_toad_men",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793547096376,
+      "tag": "0004_add_run_requested_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793553064053,
+      "tag": "0005_extension_sync_state",
+      "breakpoints": true
     }
   ]
 }

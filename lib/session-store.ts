@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { sessions } from "@/db/schema";
+import { extensionState, sessions } from "@/db/schema";
 import { decrypt, encrypt } from "./crypto";
 
 export type SessionInfo = {
@@ -8,6 +8,12 @@ export type SessionInfo = {
   updatedAt: Date;
   cookieCount: number;
   source: string;
+};
+
+export type ExtensionSessionInfo = {
+  lastExtensionSyncAt: Date | null;
+  lastBackgroundVisitAt: Date | null;
+  sessionStatus: string;
 };
 
 type CookieRecord = Record<string, unknown> & { name: string; value: string };
@@ -97,6 +103,50 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   } catch {
     return { id: row.id, updatedAt: row.updatedAt, cookieCount: 0, source: row.source };
   }
+}
+
+export async function getExtensionSessionInfo(): Promise<ExtensionSessionInfo | null> {
+  const rows = await getDb().select().from(extensionState).where(eq(extensionState.id, "current")).limit(1);
+  const row = rows[0];
+  return row ? {
+    lastExtensionSyncAt: row.lastExtensionSyncAt,
+    lastBackgroundVisitAt: row.lastBackgroundVisitAt,
+    sessionStatus: row.sessionStatus,
+  } : null;
+}
+
+export async function recordExtensionSync(backgroundVisitAt?: Date): Promise<void> {
+  const now = new Date();
+  const update = {
+    lastExtensionSyncAt: now,
+    sessionStatus: "active",
+    ...(backgroundVisitAt ? { lastBackgroundVisitAt: backgroundVisitAt } : {}),
+  };
+  await getDb().insert(extensionState).values({
+    id: "current",
+    lastExtensionSyncAt: now,
+    lastBackgroundVisitAt: backgroundVisitAt ?? null,
+    sessionStatus: "active",
+  }).onConflictDoUpdate({ target: extensionState.id, set: update });
+}
+
+export async function recordLoggedOutVisit(visitedAt: Date): Promise<boolean> {
+  const db = getDb();
+  await db.insert(extensionState).values({
+    id: "current",
+    lastBackgroundVisitAt: visitedAt,
+    sessionStatus: "logged_out",
+  }).onConflictDoUpdate({
+    target: extensionState.id,
+    set: { lastBackgroundVisitAt: visitedAt, sessionStatus: "logged_out" },
+  });
+
+  const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const claimed = await db.update(extensionState).set({ loggedOutAlertAt: new Date() }).where(and(
+    eq(extensionState.id, "current"),
+    or(isNull(extensionState.loggedOutAlertAt), lte(extensionState.loggedOutAlertAt, cutoff)),
+  )).returning({ id: extensionState.id });
+  return claimed.length > 0;
 }
 
 export async function getSessionCookies(): Promise<CookieRecord[] | null> {

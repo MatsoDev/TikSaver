@@ -44,6 +44,14 @@ export const sessions = pgTable("sessions", {
   source: text("source").notNull().default("manual"),
 });
 
+export const extensionState = pgTable("extension_state", {
+  id: text("id").primaryKey().default("current"),
+  lastExtensionSyncAt: timestamp("last_extension_sync_at", { withTimezone: true }),
+  lastBackgroundVisitAt: timestamp("last_background_visit_at", { withTimezone: true }),
+  sessionStatus: text("session_status").notNull().default("unknown"),
+  loggedOutAlertAt: timestamp("logged_out_alert_at", { withTimezone: true }),
+});
+
 export const logs = pgTable(
   "logs",
   {
