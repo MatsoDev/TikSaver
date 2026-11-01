@@ -25,8 +25,15 @@ export const SELECTORS = {
     '[data-e2e="conversation-item"]',
     'div[class*="conversation-item"]',
     'div[class*="ConversationItem"]',
+    'div[role="listitem"]',
+    'div[class*="DivItemContainer"]',
+    'a[href*="/messages/"]',
   ],
   messageInput: [
+    'div[contenteditable="true"][data-placeholder="Send a message..."]',
+    '[contenteditable="true"][aria-label="Send a message..."]',
+    'textarea[placeholder="Send a message..."]',
+    'input[placeholder="Send a message..."]',
     'div[contenteditable="true"][data-e2e*="message"]',
     'div[contenteditable="true"][class*="message"]',
     'textarea[data-e2e="message-input"]',
@@ -52,6 +59,11 @@ export const SELECTORS = {
     'a[data-e2e="message-button"]',
     'button:has-text("Message")',
     'a:has-text("Message")',
+  ],
+  skeleton: [
+    '[class*="skeleton" i]',
+    '[class*="Skeleton"]',
+    '[aria-busy="true"]',
   ],
   profileDisplayLink: [
     'a[href*="/@"]',

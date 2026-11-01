@@ -34,53 +34,55 @@ async function openConversationFallback(page: Page, username: string): Promise<v
     waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
-  await sleep(2500);
-
-  const profileLink = page.locator(SELECTORS.profileDisplayLink.join(",")).filter({
-    hasText: username,
-  }).first();
-  if (await profileLink.isVisible().catch(() => false)) {
-    await profileLink.click();
-    await sleep(1500);
-    return;
+  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+  const target = username.replace(/^@/, "").toLowerCase();
+  let items = page.locator(SELECTORS.conversationItem.join(","));
+  for (let wait = 0; wait < 15 && (await items.count().catch(() => 0)) === 0; wait += 1) {
+    await sleep(1000);
+    items = page.locator(SELECTORS.conversationItem.join(","));
   }
 
-  const search = await firstVisible(page, SELECTORS.searchInput);
-  if (search) {
-    await search.click();
-    await search.fill(username);
-    await sleep(1800);
-  }
-
-  const byName = page.getByText(username, { exact: false }).first();
-  if (await byName.isVisible().catch(() => false)) {
-    await byName.click();
-    await sleep(1500);
-    return;
+  for (let index = 0; index < Math.min(await items.count().catch(() => 0), 15); index += 1) {
+    items = page.locator(SELECTORS.conversationItem.join(","));
+    await items.nth(index).scrollIntoViewIfNeeded().catch(() => undefined);
+    await items.nth(index).click().catch(() => undefined);
+    for (let wait = 0; wait < 10; wait += 1) {
+      const header = await page.locator("header").innerText().catch(() => "");
+      const heading = await page.locator("h1,h2,[role=heading]").allInnerTexts().catch(() => []);
+      const identity = `${header} ${heading.join(" ")}`;
+      const match = identity.match(/@[A-Za-z0-9._-]+/);
+      if (match?.[0].slice(1).toLowerCase() === target) return;
+      await sleep(500);
+    }
+    await page.goto(MESSAGES_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
   }
 
   throw new Error("message button not found");
 }
 
 async function openConversation(page: Page, username: string): Promise<void> {
-  await page.goto(`${PROFILE_URL}${encodeURIComponent(username.replace(/^@/, ""))}`, {
+  await page.goto(MESSAGES_URL, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
-  await sleep(2500);
-
-  if (await detectSessionExpired(page)) return;
-
-  const messageButton = await firstVisible(page, SELECTORS.profileMessageButton);
-  if (messageButton) {
-    await messageButton.click();
-    await sleep(1800);
-    const input = await firstVisible(page, SELECTORS.messageInput);
-    if (!input) throw new Error("Could not find the message box");
-    return;
-  }
-
-  await openConversationFallback(page, username);
+  await openConversationFallback(page, username).catch(async () => {
+    await page.goto(`${PROFILE_URL}${encodeURIComponent(username.replace(/^@/, ""))}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+    for (let wait = 0; wait < 15; wait += 1) {
+      const messageButton = await firstVisible(page, SELECTORS.profileMessageButton);
+      if (messageButton) {
+        await messageButton.click();
+        await sleep(1200);
+        return;
+      }
+      await sleep(1000);
+    }
+    throw new Error("message button not found");
+  });
 }
 
 async function submitMessage(page: Page, message: string): Promise<void> {
