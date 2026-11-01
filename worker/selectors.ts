@@ -21,11 +21,11 @@ export const SELECTORS = {
     'input[type="search"]',
   ],
   conversationItem: [
+    '[data-e2e="inbox-list-item"]',
     '[data-e2e="chat-item"]',
     '[data-e2e="conversation-item"]',
     'div[class*="conversation-item"]',
     'div[class*="ConversationItem"]',
-    'div[role="listitem"]',
     'div[class*="DivItemContainer"]',
     'a[href*="/messages/"]',
   ],
@@ -64,8 +64,6 @@ export const SELECTORS = {
   profileMessageButton: [
     'button[data-e2e="message-button"]',
     'a[data-e2e="message-button"]',
-    'button:has-text("Message")',
-    'a:has-text("Message")',
   ],
   skeleton: [
     '[class*="skeleton" i]',
