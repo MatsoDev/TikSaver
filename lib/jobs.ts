@@ -50,7 +50,7 @@ export async function setJobStatus(
   patch: Partial<
     Pick<
       NewJob,
-      "lastRunDate" | "lastStatus" | "retryCount" | "nextRetryAt"
+      "lastRunDate" | "lastStatus" | "retryCount" | "nextRetryAt" | "runRequestedAt"
     >
   >,
 ): Promise<void> {

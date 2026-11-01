@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { jobs } from "@/db/schema";
 import { dispatchWorkflow } from "@/lib/github";
 import {
   createJob,
@@ -84,6 +87,14 @@ export async function sendNowAction(form: FormData): Promise<void> {
 
   const job = await getJob(id);
   if (!job) return;
+
+  if (process.env.EXECUTOR?.trim() === "local") {
+    await getDb().update(jobs).set({ runRequestedAt: new Date(), lastStatus: "queued_local" }).where(eq(jobs.id, job.id));
+    await addLog({ jobId: job.id, status: "queued", detail: "Queued for the PC." });
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/logs");
+    return;
+  }
 
   const result = await dispatchWorkflow(job.id);
   const today = formatDateInZone(new Date(), job.timezone);

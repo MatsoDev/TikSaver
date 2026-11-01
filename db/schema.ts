@@ -19,6 +19,7 @@ export const jobs = pgTable(
     timezone: text("timezone").notNull().default("Africa/Cairo"),
     jitterMinutes: integer("jitter_minutes").notNull().default(5),
     enabled: boolean("enabled").notNull().default(true),
+    runRequestedAt: timestamp("run_requested_at", { withTimezone: true }),
     lastRunDate: date("last_run_date"),
     lastStatus: text("last_status"),
     retryCount: integer("retry_count").notNull().default(0),

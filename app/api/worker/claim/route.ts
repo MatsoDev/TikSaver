@@ -22,20 +22,23 @@ export async function POST(request: Request) {
   for (const job of enabledJobs) {
     const zoned = getZonedTime(now, job.timezone);
     const sendMinutes = minutesFromTime(job.sendTime);
+    const manual = job.runRequestedAt !== null;
     if (sendMinutes === null) continue;
-    const due = job.nextRetryAt
+    const due = manual || (job.nextRetryAt
       ? job.nextRetryAt.getTime() <= now.getTime()
       : (job.lastRunDate === null || job.lastRunDate !== zoned.date) &&
-        zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes);
+        zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes));
     if (!due) continue;
 
     const claimed = await getDb()
       .update(jobs)
-      .set({ lastRunDate: zoned.date, lastStatus: "claimed", retryCount: 0, nextRetryAt: null })
+      .set({ lastRunDate: zoned.date, lastStatus: "claimed", retryCount: 0, nextRetryAt: null, runRequestedAt: null })
       .where(and(
         eq(jobs.id, job.id),
         eq(jobs.enabled, true),
-        job.nextRetryAt
+        manual
+          ? isNotNull(jobs.runRequestedAt)
+          : job.nextRetryAt
           ? and(isNotNull(jobs.nextRetryAt), lte(jobs.nextRetryAt, now))
           : or(isNull(jobs.lastRunDate), ne(jobs.lastRunDate, zoned.date)),
       ))

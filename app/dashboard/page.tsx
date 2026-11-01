@@ -23,6 +23,7 @@ function statusStyle(status: string | null): string {
 }
 
 function statusLabel(status: string | null): string {
+  if (status === "queued_local") return "queued for the PC";
   return status ? status.replaceAll("_", " ") : "never run";
 }
 
