@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 
 export const USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 export type PlaywrightCookie = {
   name: string;
@@ -25,16 +25,38 @@ export function randomBetween(min: number, max: number): number {
 }
 
 export async function launchBrowser(): Promise<Browser> {
-  return chromium.launch({ headless: true });
+  const proxyUrl = process.env.PROXY_URL;
+  let proxy: { server: string; username?: string; password?: string } | undefined;
+  if (proxyUrl) {
+    const parsed = new URL(proxyUrl);
+    proxy = {
+      server: `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`,
+      username: parsed.username || undefined,
+      password: parsed.password || undefined,
+    };
+  }
+  return chromium.launch({
+    headless: process.env.HEADLESS !== "false",
+    args: ["--disable-blink-features=AutomationControlled"],
+    proxy,
+  });
 }
 
 export async function newContext(browser: Browser, timezone: string) {
-  return browser.newContext({
+  const context = await browser.newContext({
     userAgent: USER_AGENT,
-    viewport: { width: 1280, height: 800 },
-    locale: "en-US",
-    timezoneId: timezone,
+    viewport: { width: 1366, height: 768 },
+    locale: "ar-EG",
+    timezoneId: timezone || "Africa/Cairo",
+    geolocation: { latitude: 30.0444, longitude: 31.2357 },
+    permissions: ["geolocation"],
   });
+  await context.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "webdriver", {
+      get: () => undefined,
+    });
+  });
+  return context;
 }
 
 function mapSameSite(value: unknown): "Strict" | "Lax" | "None" | undefined {

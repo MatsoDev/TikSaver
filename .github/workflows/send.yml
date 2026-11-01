@@ -43,11 +43,13 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run worker
-        run: npm run start
+        run: xvfb-run -a npm run start
         env:
           JOB_ID: ${{ inputs.job_id }}
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          HEADLESS: "false"
+          PROXY_URL: ${{ secrets.PROXY_URL }}
 
       - name: Upload screenshots
         if: always()
