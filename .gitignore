@@ -47,6 +47,7 @@ next-env.d.ts
 /worker/.env
 /extension/config.local.js
 /worker/logs
+/worker/*.log
 .env.production.local
 
 .vercel
