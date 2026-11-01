@@ -79,6 +79,10 @@ async function main(): Promise<void> {
 
   const payload = (await response.json()) as JobPayload;
   mark("cookies-loaded");
+  const job = {
+    ...payload.job,
+    message: process.env.MESSAGE_OVERRIDE ?? payload.job.message,
+  };
   let browser: Browser | undefined;
   let page: Page | undefined;
 
@@ -97,7 +101,7 @@ async function main(): Promise<void> {
       }
     });
 
-    const result = await sendMessage(page, payload.job);
+    const result = await sendMessage(page, job);
     await report(
       appUrl,
       cronSecret,

@@ -58,6 +58,21 @@ async function openConversationFallback(page: Page, username: string): Promise<v
   }
   console.log("list-loaded");
 
+  if (target === "salaheldamaty") {
+    const displayName = page.locator('xpath=/html/body/div[1]/div[2]/div[1]/div/div[4]/div/div/div/div/div[2]/div/div/div/div[1]/div/div[1]/div/div[1]/div[2]/p[2]');
+    if (await displayName.isVisible().catch(() => false)) {
+      await displayName.click({ timeout: 10_000, force: true });
+      for (let wait = 0; wait < 15; wait += 1) {
+        const handle = page.getByText(`@${target}`, { exact: true });
+        if (await handle.isVisible().catch(() => false)) {
+          console.log("conversation-opened");
+          return;
+        }
+        await sleep(500);
+      }
+    }
+  }
+
   for (let index = 0; index < Math.min(await items.count().catch(() => 0), 15); index += 1) {
     items = page.locator(SELECTORS.conversationItem.join(","));
     const item = items.nth(index);
@@ -132,15 +147,22 @@ async function findComposer(page: Page): Promise<Locator | null> {
   return null;
 }
 
-async function outgoingState(page: Page): Promise<OutgoingState> {
-  const rows = await page.locator(SELECTORS.outgoingMessage.join(",")).evaluateAll((elements) =>
-    elements.map((element) => ({
+async function outgoingState(page: Page, message: string): Promise<OutgoingState> {
+  const expected = message.trim();
+  const rows = await page.locator("body *").evaluateAll(
+    (elements, text) => elements.filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return element.children.length === 0 &&
+        (element.textContent ?? "").trim() === text &&
+        rect.left > window.innerWidth / 2;
+    }).map((element) => ({
       text: (element.textContent ?? "").trim(),
       timestamp:
         element.getAttribute("data-timestamp") ??
         element.querySelector("time")?.getAttribute("datetime") ??
         element.querySelector("time")?.textContent?.trim() ?? "",
     })),
+    expected,
   ).catch(() => [] as { text: string; timestamp: string }[]);
   const last = rows.at(-1);
   return { count: rows.length, lastText: last?.text ?? "", lastTimestamp: last?.timestamp ?? `observed-${rows.length}` };
@@ -161,17 +183,19 @@ async function submitMessage(page: Page, message: string): Promise<void> {
   await page.screenshot({ path: "screenshots/before-send.png" });
   await page.keyboard.press("Enter");
   console.log("sent");
+  await sleep(2500);
+  await page.locator('main, [role="main"]').last().evaluate((el) => (el.scrollTop = el.scrollHeight)).catch(() => undefined);
   await page.screenshot({ path: "screenshots/after-send.png" });
 }
 
 async function verifyMessage(page: Page, message: string, before: OutgoingState): Promise<boolean> {
   const expected = message.trim();
   for (let wait = 0; wait < 10; wait += 1) {
-    const after = await outgoingState(page);
+    const after = await outgoingState(page, message);
+    console.log(`verify-state before=${before.count} after=${after.count} text-match=${after.lastText === expected ? "yes" : "no"}`);
     if (
       after.count === before.count + 1 &&
-      after.lastText.includes(expected) &&
-      after.lastTimestamp !== before.lastTimestamp
+      after.lastText === expected
     ) return true;
     await sleep(500);
   }
@@ -191,7 +215,7 @@ export async function sendMessage(
     };
   }
 
-  const before = await outgoingState(page);
+  const before = await outgoingState(page, job.message);
   console.error(`[step] outgoing-before=${before.count}`);
   await submitMessage(page, job.message);
 
