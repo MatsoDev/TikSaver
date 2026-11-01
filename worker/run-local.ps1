@@ -31,12 +31,15 @@ try {
     $env:APP_URL = $appUrl
     $env:CRON_SECRET = $cron
     $env:HEADLESS = "true"
-    npx tsx (Join-Path $workerRoot "run.ts") 2>&1 | ForEach-Object {
-      if ($_ -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or $_ -match '^(success|failed|session_expired)$' -or $_ -match '^\[(failed-step|conversation-list|screenshot|worker error)\]') {
-        Write-LocalLog $_
+    $workerOutput = @(& npx tsx (Join-Path $workerRoot "run.ts") 2>&1)
+    $workerExitCode = $LASTEXITCODE
+    foreach ($entry in $workerOutput) {
+      $line = [string]$entry
+      if ($line -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or $line -match '^(success|failed|session_expired)$' -or $line -match '^\[(failed-step|conversation-list|screenshot|worker error)\]') {
+        Write-LocalLog $line
       }
     }
-    if ($LASTEXITCODE -ne 0) { $exitCode = $LASTEXITCODE }
+    if ($workerExitCode -ne 0) { $exitCode = $workerExitCode }
   }
 } catch {
   $status = if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { [int]$_.Exception.Response.StatusCode } else { "none" }

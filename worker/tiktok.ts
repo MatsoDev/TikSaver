@@ -51,9 +51,10 @@ export async function detectSessionExpired(page: Page): Promise<boolean> {
 async function openConversationFallback(page: Page, username: string): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
   const target = username.replace(/^@/, "").toLowerCase();
-  let items = page.locator(SELECTORS.conversationItem.join(","));
+  const itemSelector = SELECTORS.conversationName.join(",");
+  let items = page.locator(itemSelector);
   const displayName = async (item: Locator) => {
-    const name = (await item.locator("p").first().innerText().catch(() => "")).trim();
+    const name = (await item.innerText().catch(() => "")).trim();
     return name && name.length <= 80 && !/^(loading|\.\.\.|—)$/i.test(name) ? name : "";
   };
   const hasNamedItem = async () => {
@@ -65,9 +66,9 @@ async function openConversationFallback(page: Page, username: string): Promise<v
   };
   for (let wait = 0; wait < 20 && !(await hasNamedItem()); wait += 1) {
     await sleep(1000);
-    items = page.locator(SELECTORS.conversationItem.join(","));
+    items = page.locator(itemSelector);
   }
-  items = page.locator(SELECTORS.conversationItem.join(","));
+  items = page.locator(itemSelector);
   const itemCount = await items.count().catch(() => 0);
   const displayNames: string[] = [];
   for (let i = 0; i < Math.min(itemCount, 15); i += 1) {
@@ -84,7 +85,7 @@ async function openConversationFallback(page: Page, username: string): Promise<v
   }).catch(() => undefined);
 
   for (let index = 0; index < Math.min(itemCount, 20); index += 1) {
-    items = page.locator(SELECTORS.conversationItem.join(","));
+    items = page.locator(itemSelector);
     const item = items.nth(index);
     if (!(await item.isVisible().catch(() => false))) continue;
     await item.click({ timeout: 5_000, force: true }).catch(() => undefined);

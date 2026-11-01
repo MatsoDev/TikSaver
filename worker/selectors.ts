@@ -29,11 +29,7 @@ export const SELECTORS = {
     'a[href*="/messages/"]',
   ],
   conversationName: [
-    '[data-e2e="inbox-list-item"] p',
-    '[data-e2e="chat-item"] p',
-    '[data-e2e="conversation-item"] p',
-    'div[class*="conversation-item"] p',
-    'div[class*="DivItemContainer"] p',
+    'xpath=/html/body/div[1]/div[2]/div[1]/div/div[4]/div/div/div/div/div[2]/div/div/div/div[1]/div/div/div/div/div[2]/p[2]',
   ],
   messageInput: [
     'div[contenteditable="true"][data-placeholder="Send a message..."]',
