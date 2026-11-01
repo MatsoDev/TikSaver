@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   const now = new Date();
   const enabledJobs = await getDb().select().from(jobs).where(eq(jobs.enabled, true));
   const claimedIds: string[] = [];
+  const sendMode = process.env.SEND_MODE?.trim() || (process.env.EXECUTOR?.trim() === "local" ? "on_pc_start" : "scheduled");
   const debug = request.headers.get("x-debug") === "1";
   const debugJobs: Array<{ idSuffix: string; due: boolean; reason: string }> = [];
 
@@ -31,7 +32,8 @@ export async function POST(request: Request) {
     }
     const retryWait = Boolean(job.nextRetryAt && job.nextRetryAt.getTime() > now.getTime());
     const alreadyRan = !manual && job.lastRunDate !== null && job.lastRunDate === zoned.date;
-    const due = manual || (!retryWait && !alreadyRan && (job.nextRetryAt
+    const pcStartDue = sendMode === "on_pc_start" && !retryWait && !alreadyRan;
+    const due = manual || pcStartDue || (!retryWait && !alreadyRan && (job.nextRetryAt
       ? job.nextRetryAt.getTime() <= now.getTime()
       : (job.lastRunDate === null || job.lastRunDate !== zoned.date) &&
         zoned.minutes >= sendMinutes + deterministicJitter(job.id, zoned.date, job.jitterMinutes)));

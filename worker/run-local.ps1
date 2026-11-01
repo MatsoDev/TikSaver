@@ -8,6 +8,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir "local.log"
 function Write-LocalLog([string]$value) { Add-Content -LiteralPath $log -Value ("$(Get-Date -Format o) $value") }
 $exitCode = 0
+$jobIndex = 0
 Write-LocalLog "run-start"
 
 try {
@@ -22,7 +23,9 @@ try {
   $claimed = @($claim.claimed)
   Write-LocalLog "claim_http=$([int]$claimResponse.StatusCode) claimed=$($claimed.Count)"
   foreach ($jobId in $claimed) {
-    Start-Sleep -Seconds (Get-Random -Minimum 0 -Maximum 181)
+    if ($jobIndex -eq 0) { Start-Sleep -Seconds (Get-Random -Minimum 0 -Maximum 61) }
+    else { Start-Sleep -Seconds (Get-Random -Minimum 20 -Maximum 91) }
+    $jobIndex++
     $env:JOB_ID = $jobId
     $env:APP_URL = $appUrl
     $env:CRON_SECRET = $cron

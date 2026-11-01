@@ -41,6 +41,7 @@ export default async function DashboardPage() {
               ? "No jobs yet."
               : `${jobs.filter((job) => job.enabled).length} of ${jobs.length} active.`}
           </p>
+          <p className="text-xs text-zinc-500">Sends once per day when the PC starts.</p>
         </div>
         <Link
           href="/dashboard/jobs/new"
@@ -132,7 +133,7 @@ export default async function DashboardPage() {
 
                 <span className="ms-auto text-xs text-zinc-500">
                   {job.lastRunDate
-                    ? `last run ${job.lastRunDate}`
+                    ? `last sent: ${job.lastRunDate}`
                     : "not run yet"}
                 </span>
               </div>
