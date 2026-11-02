@@ -17,9 +17,9 @@ The production app is [tiksaver-six.vercel.app](https://tiksaver-six.vercel.app)
 
 ## Daily send behavior
 
-With `EXECUTOR=local` and the default `SEND_MODE`, the PC worker claims enabled jobs that have not been sent on the current date in each job's timezone. It does not wait for `send_time` to send. The configured send time remains useful as the reference for unsent-job reminders. A job is claimed atomically, so overlapping task runs do not send it twice for the same local date. **Send now** queues that job for the PC and is eligible immediately.
+With `EXECUTOR=local` and `SEND_MODE=scheduled`, the PC worker sends enabled jobs at `send_time` in each job's timezone, plus configured jitter. If the PC is off at that time, the next task run after sign-in claims the overdue job. A job is claimed atomically, so overlapping task runs do not send it twice for the same local date. **Send now** queues that job for the PC and is eligible immediately. `SEND_MODE=on_pc_start` is an optional mode that sends once on the first claim each local date, regardless of `send_time`.
 
-When the PC is off, scheduled jobs wait. Turn on the PC and sign in to Windows; the Scheduled Task runs at logon and repeats every five minutes while the user session is active. The task does not wake or power on the PC. A missed send can produce a Telegram reminder while the PC is off.
+When the PC is off, scheduled jobs wait. Turn on the PC and sign in to Windows; the Scheduled Task runs at logon and repeats every minute while the user session is active. The task does not wake or power on the PC. A missed send can produce a Telegram reminder while the PC is off.
 
 ## Repository map
 
@@ -53,7 +53,7 @@ Set secrets in Vercel Project Settings → Environment Variables. Do not put rea
 | `ENCRYPTION_KEY` | Base64-encoded 32-byte key used to encrypt stored TikTok cookies. Keep it stable. |
 | `CRON_SECRET` | Shared secret for cron and worker API authentication. |
 | `EXECUTOR` | Set to `local` to keep scheduled sends on the PC. |
-| `SEND_MODE` | Optional; `on_pc_start` sends each enabled job once per local date when claimed. With local execution this is the default. |
+| `SEND_MODE` | Use `scheduled` for the selected send times; `on_pc_start` sends once per local date when claimed. |
 | `GITHUB_TOKEN`, `GITHUB_REPO` | Optional GitHub dispatch configuration for the Actions executor. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram delivery configuration. |
 | `EXTENSION_TOKEN` | Secret used by the browser extension to authenticate session sync. |
@@ -92,7 +92,7 @@ Disable-ScheduledTask -TaskName Tiksave
 Enable-ScheduledTask -TaskName Tiksave
 ```
 
-To change a job's timezone or reminder reference time, edit that job in the dashboard. In `on_pc_start` mode, the send time does not delay the local send; the local date, enabled state, retry state, and manual queue determine eligibility.
+To change a job's send time or timezone, edit that job in the dashboard. In `scheduled` mode, the time controls when it becomes due; in `on_pc_start` mode, it is used only as the reminder reference.
 
 ## Chrome extension: automatic session refresh
 
