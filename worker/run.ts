@@ -135,6 +135,7 @@ async function main(): Promise<void> {
       result.detail,
       page,
     );
+    if (result.status !== "success") process.exitCode = 1;
   } catch (error) {
     const info = errorInfo(error);
     console.error(`[failed-step] ${step} ${info.name}: ${info.message.slice(0, 200)}`);

@@ -5,6 +5,14 @@ import type { SendResult, WorkerJob } from "./types";
 
 type OutgoingState = { count: number; lastText: string; lastTimestamp: string };
 
+function normalizeMessageText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function marked<T>(name: string, action: () => Promise<T>): Promise<T> {
   try {
     const value = await action();
@@ -159,24 +167,40 @@ async function findComposer(page: Page): Promise<Locator | null> {
 }
 
 async function outgoingState(page: Page, message: string): Promise<OutgoingState> {
-  const expected = message.trim();
-  const rows = await page.locator("body *").evaluateAll(
-    (elements, text) => elements.filter((element) => {
+  const bubbleSelector = [...SELECTORS.outgoingMessage, ...SELECTORS.messageBubble].join(",");
+  const rows = await page.locator(bubbleSelector).evaluateAll((elements) => {
+    const candidates = elements.flatMap((element) => {
       const rect = element.getBoundingClientRect();
-      return element.children.length === 0 &&
-        (element.textContent ?? "").trim() === text &&
-        rect.left > window.innerWidth / 2;
-    }).map((element) => ({
-      text: (element.textContent ?? "").trim(),
-      timestamp:
-        element.getAttribute("data-timestamp") ??
-        element.querySelector("time")?.getAttribute("datetime") ??
-        element.querySelector("time")?.textContent?.trim() ?? "",
-    })),
-    expected,
-  ).catch(() => [] as { text: string; timestamp: string }[]);
+      const style = window.getComputedStyle(element);
+      const text = (element as HTMLElement).innerText?.trim() ?? "";
+      const visible = rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      if (!visible || !text || rect.left <= window.innerWidth / 2) return [];
+      return [{
+        text,
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        timestamp:
+          element.getAttribute("data-timestamp") ??
+          element.querySelector("time")?.getAttribute("datetime") ??
+          element.querySelector("time")?.textContent?.trim() ?? "",
+      }];
+    });
+    const unique = new Map<string, (typeof candidates)[number]>();
+    for (const candidate of candidates) {
+      const key = `${candidate.top}:${candidate.text}`;
+      const previous = unique.get(key);
+      if (!previous || candidate.bottom - candidate.top < previous.bottom - previous.top) {
+        unique.set(key, candidate);
+      }
+    }
+    return [...unique.values()].sort((a, b) => a.bottom - b.bottom);
+  }).catch(() => [] as { text: string; top: number; bottom: number; timestamp: string }[]);
   const last = rows.at(-1);
-  return { count: rows.length, lastText: last?.text ?? "", lastTimestamp: last?.timestamp ?? `observed-${rows.length}` };
+  return {
+    count: rows.length,
+    lastText: last?.text ?? "",
+    lastTimestamp: last?.timestamp ?? (last ? `observed-${rows.length}` : ""),
+  };
 }
 
 async function submitMessage(page: Page, message: string): Promise<void> {
@@ -200,13 +224,13 @@ async function submitMessage(page: Page, message: string): Promise<void> {
 }
 
 async function verifyMessage(page: Page, message: string, before: OutgoingState): Promise<boolean> {
-  const expected = message.trim();
+  const expected = normalizeMessageText(message);
   for (let wait = 0; wait < 10; wait += 1) {
     const after = await outgoingState(page, message);
-    console.log(`verify-state before=${before.count} after=${after.count} text-match=${after.lastText === expected ? "yes" : "no"}`);
+    console.log(`verify-state before=${before.count} after=${after.count} text-match=${normalizeMessageText(after.lastText) === expected ? "yes" : "no"}`);
     if (
       after.count === before.count + 1 &&
-      after.lastText === expected
+      normalizeMessageText(after.lastText) === expected
     ) return true;
     await sleep(500);
   }
