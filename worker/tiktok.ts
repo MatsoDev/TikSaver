@@ -167,14 +167,19 @@ async function findComposer(page: Page): Promise<Locator | null> {
 }
 
 async function outgoingState(page: Page, message: string): Promise<OutgoingState> {
-  const bubbleSelector = [...SELECTORS.outgoingMessage, ...SELECTORS.messageBubble].join(",");
-  const rows = await page.locator(bubbleSelector).evaluateAll((elements) => {
+  const expected = normalizeMessageText(message);
+  const rows = await page.locator("body *").evaluateAll((elements, target) => {
+    const normalize = (value: string) => value
+      .normalize("NFKC")
+      .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const candidates = elements.flatMap((element) => {
       const rect = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
       const text = (element as HTMLElement).innerText?.trim() ?? "";
       const visible = rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-      if (!visible || !text || rect.left <= window.innerWidth / 2) return [];
+      if (!visible || element.children.length !== 0 || normalize(text) !== target || rect.left <= window.innerWidth / 2) return [];
       return [{
         text,
         top: Math.round(rect.top),
@@ -185,16 +190,9 @@ async function outgoingState(page: Page, message: string): Promise<OutgoingState
           element.querySelector("time")?.textContent?.trim() ?? "",
       }];
     });
-    const unique = new Map<string, (typeof candidates)[number]>();
-    for (const candidate of candidates) {
-      const key = `${candidate.top}:${candidate.text}`;
-      const previous = unique.get(key);
-      if (!previous || candidate.bottom - candidate.top < previous.bottom - previous.top) {
-        unique.set(key, candidate);
-      }
-    }
+    const unique = new Map(candidates.map((candidate) => [candidate.top, candidate]));
     return [...unique.values()].sort((a, b) => a.bottom - b.bottom);
-  }).catch(() => [] as { text: string; top: number; bottom: number; timestamp: string }[]);
+  }, expected).catch(() => [] as { text: string; top: number; bottom: number; timestamp: string }[]);
   const last = rows.at(-1);
   return {
     count: rows.length,
