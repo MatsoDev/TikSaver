@@ -8,7 +8,7 @@ type OutgoingState = { count: number; lastText: string; lastTimestamp: string };
 function normalizeMessageText(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -166,23 +166,19 @@ async function findComposer(page: Page): Promise<Locator | null> {
   return null;
 }
 
-async function outgoingState(page: Page, message: string): Promise<OutgoingState> {
+export async function outgoingState(page: Page, message: string): Promise<OutgoingState> {
   const expected = normalizeMessageText(message);
   const rows = await page.locator("body *").evaluateAll((elements, target) => {
-    const normalize = (value: string) => value
-      .normalize("NFKC")
-      .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
     const candidates = elements.flatMap((element) => {
       const rect = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
       const text = (element as HTMLElement).innerText?.trim() ?? "";
+      const normalizedText = text.normalize("NFKC").replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, "").replace(/\s+/g, " ").trim();
       const visible = rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
       const nestedMatch = Array.from(element.children).some((child) =>
-        normalize((child as HTMLElement).innerText ?? "") === target,
+        ((child as HTMLElement).innerText ?? "").normalize("NFKC").replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u0640]/g, "").replace(/\s+/g, " ").trim() === target,
       );
-      if (!visible || nestedMatch || normalize(text) !== target || rect.left <= window.innerWidth / 2 || element.closest('[contenteditable="true"], textarea, input')) return [];
+      if (!visible || nestedMatch || normalizedText !== target || rect.left <= window.innerWidth / 2 || element.closest('[contenteditable="true"], textarea, input')) return [];
       return [{
         text,
         top: Math.round(rect.top),
@@ -195,7 +191,7 @@ async function outgoingState(page: Page, message: string): Promise<OutgoingState
     });
     const unique = new Map(candidates.map((candidate) => [candidate.top, candidate]));
     return [...unique.values()].sort((a, b) => a.bottom - b.bottom);
-  }, expected).catch(() => [] as { text: string; top: number; bottom: number; timestamp: string }[]);
+  }, expected);
   const last = rows.at(-1);
   return {
     count: rows.length,
@@ -204,7 +200,7 @@ async function outgoingState(page: Page, message: string): Promise<OutgoingState
   };
 }
 
-async function submitMessage(page: Page, message: string): Promise<void> {
+async function submitMessage(page: Page, message: string): Promise<OutgoingState> {
   console.error("[step] finding composer");
   const input = await findComposer(page);
   if (!input) throw new Error("Could not find the message box");
@@ -217,16 +213,19 @@ async function submitMessage(page: Page, message: string): Promise<void> {
   await sleep(500);
 
   await page.screenshot({ path: "screenshots/before-send.png" });
+  const before = await outgoingState(page, message);
+  console.log(`verification-baseline count=${before.count}`);
   await page.keyboard.press("Enter");
   console.log("sent");
   await sleep(2500);
   await page.locator('main, [role="main"]').last().evaluate((el) => (el.scrollTop = el.scrollHeight)).catch(() => undefined);
   await page.screenshot({ path: "screenshots/after-send.png" });
+  return before;
 }
 
 async function verifyMessage(page: Page, message: string, before: OutgoingState): Promise<boolean> {
   const expected = normalizeMessageText(message);
-  for (let wait = 0; wait < 10; wait += 1) {
+  for (let wait = 0; wait < 40; wait += 1) {
     const after = await outgoingState(page, message);
     console.log(`verify-state before=${before.count} after=${after.count} text-match=${normalizeMessageText(after.lastText) === expected ? "yes" : "no"}`);
     if (
@@ -251,9 +250,7 @@ export async function sendMessage(
     };
   }
 
-  const before = await outgoingState(page, job.message);
-  console.error(`[step] outgoing-before=${before.count}`);
-  await submitMessage(page, job.message);
+  const before = await submitMessage(page, job.message);
 
   if (await detectSessionExpired(page)) {
     return {
