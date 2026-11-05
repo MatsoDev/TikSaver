@@ -70,6 +70,9 @@ export async function POST(request: Request) {
 
   if (status === "success" || status === "session_expired") {
     retryCount = 0;
+  } else if (detail?.includes("Message was submitted but could not be verified")) {
+    // Enter was already pressed. Retrying can deliver the same message twice.
+    retryCount = 0;
   } else if (job.retryCount < MAX_RETRIES) {
     retryCount = job.retryCount + 1;
     nextRetryAt = new Date(Date.now() + RETRY_DELAY_MS);
