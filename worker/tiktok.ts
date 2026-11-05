@@ -179,7 +179,10 @@ async function outgoingState(page: Page, message: string): Promise<OutgoingState
       const style = window.getComputedStyle(element);
       const text = (element as HTMLElement).innerText?.trim() ?? "";
       const visible = rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-      if (!visible || element.children.length !== 0 || normalize(text) !== target || rect.left <= window.innerWidth / 2) return [];
+      const nestedMatch = Array.from(element.children).some((child) =>
+        normalize((child as HTMLElement).innerText ?? "") === target,
+      );
+      if (!visible || nestedMatch || normalize(text) !== target || rect.left <= window.innerWidth / 2 || element.closest('[contenteditable="true"], textarea, input')) return [];
       return [{
         text,
         top: Math.round(rect.top),
