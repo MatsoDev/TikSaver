@@ -6,7 +6,7 @@ import {
   normalizeCookies,
 } from "./browser";
 import { postResult } from "./report";
-import { sendMessage } from "./tiktok";
+import { sendMessage, detectSessionExpired } from "./tiktok";
 import type { JobPayload, WorkerStatus } from "./types";
 
 function requireEnv(name: string): string {
@@ -58,11 +58,7 @@ async function isSessionExpired(page: Page): Promise<boolean> {
   try {
     const path = new URL(page.url()).pathname.toLowerCase();
     if (path === "/login" || path.startsWith("/login/")) return true;
-    return await page
-      .locator('input[type="password"], [data-e2e*="captcha"], iframe[src*="captcha"], [class*="captcha" i]')
-      .filter({ visible: true })
-      .count()
-      .then((count) => count > 0);
+    return await detectSessionExpired(page);
   } catch {
     return false;
   }

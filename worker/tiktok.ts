@@ -42,7 +42,16 @@ async function firstVisible(
 }
 
 export async function detectSessionExpired(page: Page): Promise<boolean> {
-  if (/\/login/i.test(page.url())) return true;
+  const path = new URL(page.url()).pathname.toLowerCase();
+  if (path === "/login" || path.startsWith("/login/")) return true;
+
+  // A rendered chat composer is positive evidence of an authenticated inbox.
+  // TikTok also keeps unrelated login/captcha infrastructure in the page.
+  if (path.startsWith("/messages")) {
+    for (const selector of SELECTORS.messageInput) {
+      if (await page.locator(selector).last().isVisible().catch(() => false)) return false;
+    }
+  }
 
   for (const selector of [...SELECTORS.loginWall, ...SELECTORS.captcha]) {
     const visible = await page
