@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
-  const localExecutor = process.env.EXECUTOR?.trim() === "local";
+  const localExecutor = process.env.EXECUTOR?.trim() !== "github";
   const enabledJobs = await getDb()
     .select()
     .from(jobs)
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   let failed = 0;
 
   for (const job of enabledJobs) {
-    if (job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime()) {
+    if (!localExecutor && job.nextRetryAt && job.nextRetryAt.getTime() <= now.getTime()) {
       const claimedRetry = await getDb()
         .update(jobs)
         .set({ nextRetryAt: null, lastStatus: "retrying" })
