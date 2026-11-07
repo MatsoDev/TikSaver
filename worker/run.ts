@@ -154,8 +154,9 @@ async function main(): Promise<void> {
       console.error("[screenshot] no page");
     }
     try {
-      const detail = page && (await isSessionExpired(page)) ? "session_expired" : errorDetail(error);
-      await postResult(appUrl, cronSecret, jobId, "failed", detail, screenshotUrl);
+      const sessionExpired = Boolean(page && (await isSessionExpired(page)));
+      const detail = sessionExpired ? "session_expired" : errorDetail(error);
+      await postResult(appUrl, cronSecret, jobId, sessionExpired ? "session_expired" : "failed", detail, screenshotUrl);
     } catch (reportError) {
       logError(reportError);
     }

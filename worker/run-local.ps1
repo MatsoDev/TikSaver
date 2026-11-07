@@ -17,6 +17,8 @@ try {
   for ($i = 0; $i -lt 18; $i++) {
     try { Invoke-WebRequest "https://www.google.com/generate_204" -UseBasicParsing -TimeoutSec 10 | Out-Null; break } catch { if ($i -eq 17) { throw } ; Start-Sleep -Seconds 10 }
   }
+  Start-Sleep -Seconds 25
+  Write-LocalLog "extension_refresh_wait=25"
   $claimResponse = Invoke-WebRequest -Method Post -Uri "$appUrl/api/worker/claim" -Headers @{ "x-cron-secret" = $cron } -ContentType "application/json" -Body "{}"
   $claim = $claimResponse.Content | ConvertFrom-Json
   $claimed = @($claim.claimed)
