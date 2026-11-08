@@ -103,17 +103,21 @@ export async function GET(request: Request) {
       continue;
     }
 
-    if (job.lastRunDate !== today && currentMinutes >= 20 * 60) {
+    if (currentMinutes >= 20 * 60) {
       const late = currentMinutes >= 22 * 60 + 30;
-      const marker = late ? job.lateReminderSentDate : job.reminderSentDate;
-      if (marker !== today) {
-        const sent = await sendTelegram("Streak not sent yet today, turn on the PC or send manually.");
-        if (sent.ok) {
-          await getDb().update(jobs).set(late
-            ? { lateReminderSentDate: today }
-            : { reminderSentDate: today },
-          ).where(and(eq(jobs.id, job.id), eq(jobs.enabled, true)));
-        }
+      const marker = late ? jobs.lateReminderSentDate : jobs.reminderSentDate;
+      // Compare SQL dates in Postgres, and claim the reminder before sending.
+      // Driver date representations and overlapping ticks cannot bypass this guard.
+      const claimedReminder = await getDb().update(jobs).set(late
+        ? { lateReminderSentDate: today }
+        : { reminderSentDate: today },
+      ).where(and(
+        eq(jobs.id, job.id), eq(jobs.enabled, true),
+        or(isNull(jobs.lastRunDate), ne(jobs.lastRunDate, today)),
+        or(isNull(marker), ne(marker, today)),
+      )).returning({ id: jobs.id });
+      if (claimedReminder.length) {
+        await sendTelegram("Streak not sent yet today, turn on the PC or send manually.");
       }
     }
 
