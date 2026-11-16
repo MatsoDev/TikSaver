@@ -17,6 +17,8 @@ The production app is [tiksaver-six.vercel.app](https://tiksaver-six.vercel.app)
 
 ## Daily send behavior
 
+Production v0.2.0 uses `SEND_MODE=on_pc_start`: enabled jobs run after Windows sign-in, once per date in each job's timezone. The local runner waits a random 2–4 minutes between jobs. Restarting the PC does not repeat jobs already claimed that day; **Send now** remains an explicit manual override.
+
 With `EXECUTOR=local` and `SEND_MODE=scheduled`, the PC worker sends enabled jobs at `send_time` in each job's timezone, plus configured jitter. If the PC is off at that time, the next task run after sign-in claims the overdue job. A job is claimed atomically, so overlapping task runs do not send it twice for the same local date. **Send now** queues that job for the PC and is eligible immediately. `SEND_MODE=on_pc_start` is an optional mode that sends once on the first claim each local date, regardless of `send_time`.
 
 When the PC is off, scheduled jobs wait. Turn on the PC and sign in to Windows; the Scheduled Task runs at logon and repeats every minute while the user session is active. The task does not wake or power on the PC. A missed send can produce a Telegram reminder while the PC is off.

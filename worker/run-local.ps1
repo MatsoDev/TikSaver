@@ -23,7 +23,14 @@ try {
   $claim = $claimResponse.Content | ConvertFrom-Json
   $claimed = @($claim.claimed)
   Write-LocalLog "claim_http=$([int]$claimResponse.StatusCode) claimed=$($claimed.Count)"
+  $jobIndex = 0
   foreach ($jobId in $claimed) {
+    if ($jobIndex -gt 0) {
+      $spacingSeconds = Get-Random -Minimum 120 -Maximum 241
+      Write-LocalLog "between_jobs_delay=$spacingSeconds"
+      Start-Sleep -Seconds $spacingSeconds
+    }
+    $jobIndex++
     $env:JOB_ID = $jobId
     $env:APP_URL = $appUrl
     $env:CRON_SECRET = $cron
