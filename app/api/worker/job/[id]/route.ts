@@ -47,6 +47,7 @@ export async function GET(
       targetUsername: job.targetUsername,
       message: job.message,
       timezone: job.timezone,
+      claimId: job.claimId,
     },
     cookies,
   });

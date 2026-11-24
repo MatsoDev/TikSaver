@@ -13,6 +13,7 @@ function statusStyle(status: string): string {
     case "dispatch_failed":
       return "bg-red-500/10 text-red-300";
     case "session_expired":
+    case "network_wait":
       return "bg-amber-500/10 text-amber-300";
     default:
       return "bg-zinc-800 text-zinc-400";

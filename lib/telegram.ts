@@ -31,6 +31,7 @@ export async function sendTelegram(text: string): Promise<TelegramSendResult> {
           disable_web_page_preview: true,
         }),
         cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
       },
     );
 

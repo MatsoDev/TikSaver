@@ -80,6 +80,12 @@ For production schema changes, create a Drizzle migration, review it, and apply 
 
 ## Windows PC executor
 
+### Automatic recovery after a connection outage
+
+Network errors before sending enter a waiting state and retry after 5, 10, 20, then 30 minutes while the PC is on. The delay remains capped at 30 minutes, and repeated waiting notifications are suppressed. Expired TikTok sessions still require a valid login and are not treated as network failures.
+
+Worker results are saved in the ignored `worker/logs/pending-results/` folder before upload. Every task run flushes this queue before claiming more jobs; lost HTTP acknowledgements replay the same receipt without duplicating the result or notification. A claim interrupted before submission can recover after 20 minutes. The worker must acknowledge a server checkpoint before pressing Enter; once submission begins, an uncertain delivery never triggers an automatic resend.
+
 The supported local runner is `worker/run-local.ps1`. It reads `CRON_SECRET` from the repository `.env.local`, uses the configured production app URL, claims eligible jobs from `/api/worker/claim`, and launches the worker sequentially. The local log is `worker/logs/local.log`; it records execution markers and statuses, not message contents, cookies, or credentials. Treat logs and screenshots as private operational data.
 
 The Scheduled Task is named **Tiksave** and is intended to run as the current Windows user, at sign-in and on a five-minute repeat while that session is active. It does not use a startup trigger or wake the PC.

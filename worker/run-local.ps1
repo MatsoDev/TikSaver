@@ -19,7 +19,14 @@ try {
   }
   Start-Sleep -Seconds 25
   Write-LocalLog "extension_refresh_wait=25"
-  $claimResponse = Invoke-WebRequest -Method Post -Uri "$appUrl/api/worker/claim" -Headers @{ "x-cron-secret" = $cron } -ContentType "application/json" -Body "{}"
+  $env:APP_URL = $appUrl
+  $env:CRON_SECRET = $cron
+  $flush = Start-Process -FilePath (Join-Path $node24 "node.exe") `
+    -ArgumentList @((Join-Path $workerRoot "node_modules\tsx\dist\cli.mjs"), (Join-Path $workerRoot "flush-results.ts")) `
+    -WorkingDirectory $workerRoot -WindowStyle Hidden -Wait -PassThru
+  if ($flush.ExitCode -ne 0) { throw "Pending results are waiting for the connection; new claims deferred" }
+  Write-LocalLog "outbox-flushed"
+  $claimResponse = Invoke-WebRequest -Method Post -Uri "$appUrl/api/worker/claim" -Headers @{ "x-cron-secret" = $cron } -ContentType "application/json" -Body "{}" -TimeoutSec 20
   $claim = $claimResponse.Content | ConvertFrom-Json
   $claimed = @($claim.claimed)
   Write-LocalLog "claim_http=$([int]$claimResponse.StatusCode) claimed=$($claimed.Count)"
@@ -32,6 +39,7 @@ try {
     }
     $jobIndex++
     $env:JOB_ID = $jobId
+    $env:CLAIM_ID = ($claim.claims | Where-Object { $_.id -eq $jobId } | Select-Object -First 1).claimId
     $env:APP_URL = $appUrl
     $env:CRON_SECRET = $cron
     $env:HEADLESS = "true"
@@ -47,6 +55,7 @@ try {
         foreach ($line in (Get-Content -LiteralPath $file -ErrorAction SilentlyContinue)) {
           if ($line -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or
               $line -match '^(success|failed|session_expired)$' -or
+              $line -match '^result-(posted|queued) status=(success|failed|session_expired|network_wait)$' -or
               $line -match '^(verification-baseline count=\d+|verify-state before=\d+ after=\d+ text-match=(yes|no))$' -or
               $line -match '^\[(failed-step|conversation-list|screenshot|worker error)\]' -or
               $line -match '^\[navigation\] /[A-Za-z0-9_./-]*$' -or

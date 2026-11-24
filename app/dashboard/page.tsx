@@ -14,6 +14,7 @@ function statusStyle(status: string | null): string {
     case "dispatch_failed":
       return "bg-red-500/10 text-red-300";
     case "session_expired":
+    case "network_wait":
       return "bg-amber-500/10 text-amber-300";
     case "retrying":
       return "bg-sky-500/10 text-sky-300";
@@ -23,6 +24,7 @@ function statusStyle(status: string | null): string {
 }
 
 function statusLabel(status: string | null): string {
+  if (status === "network_wait") return "waiting for connection";
   if (status === "queued_local") return "queued for the PC";
   return status ? status.replaceAll("_", " ") : "never run";
 }

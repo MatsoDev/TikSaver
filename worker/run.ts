@@ -6,6 +6,7 @@ import {
   normalizeCookies,
 } from "./browser";
 import { postResult } from "./report";
+import { canRetryNetwork } from "./recovery";
 import { sendMessage, detectSessionExpired } from "./tiktok";
 import type { JobPayload, WorkerStatus } from "./types";
 
@@ -73,8 +74,14 @@ async function main(): Promise<void> {
 
   if (!jobId) throw new Error("JOB_ID is required");
 
+  let browser: Browser | undefined;
+  let page: Page | undefined;
+  let context: Awaited<ReturnType<typeof newContext>> | undefined;
+  let submissionStarted = false;
+  try {
   const response = await fetch(`${appUrl}/api/worker/job/${jobId}`, {
     headers: { "x-cron-secret": cronSecret },
+    signal: AbortSignal.timeout(20_000),
   });
   mark("job-fetched");
 
@@ -83,21 +90,21 @@ async function main(): Promise<void> {
       response.status === 409
         ? "No TikTok session is stored."
         : `Could not load the job (status ${response.status}).`;
-    await report(appUrl, cronSecret, jobId, "failed", reason);
+    await report(appUrl, cronSecret, jobId, response.status === 409 ? "session_expired" : "failed", reason);
+    process.exitCode = 1;
     return;
   }
 
   const payload = (await response.json()) as JobPayload;
+  if (process.env.CLAIM_ID && payload.job.claimId !== process.env.CLAIM_ID) {
+    throw new Error("The job claim was replaced; refusing to send");
+  }
+  if (payload.job.claimId) process.env.CLAIM_ID = payload.job.claimId;
   mark("cookies-loaded");
   const job = {
     ...payload.job,
     message: process.env.MESSAGE_OVERRIDE ?? payload.job.message,
   };
-  let browser: Browser | undefined;
-  let page: Page | undefined;
-  let context: Awaited<ReturnType<typeof newContext>> | undefined;
-
-  try {
     browser = await launchBrowser();
     mark("browser-launched");
     context = await newContext(browser, payload.job.timezone);
@@ -112,7 +119,18 @@ async function main(): Promise<void> {
       }
     });
 
-    const result = await sendMessage(page, job);
+    const result = await sendMessage(page, job, async () => {
+      const response = await fetch(`${appUrl}/api/worker/submission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
+        body: JSON.stringify({ jobId, claimId: process.env.CLAIM_ID }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) throw new Error(`Submission checkpoint refused (HTTP ${response.status})`);
+      submissionStarted = true;
+    });
+    // Durably record the send result before any optional cookie write-back.
+    await report(appUrl, cronSecret, jobId, result.status, result.detail, page);
     if (result.status === "success" && context) {
       const cookies = (await context.cookies("https://www.tiktok.com")).filter((cookie) =>
         cookie.domain.replace(/^\./, "").endsWith("tiktok.com"),
@@ -121,16 +139,9 @@ async function main(): Promise<void> {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
         body: JSON.stringify({ cookies }),
-      });
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => console.error("[worker error] Cookie refresh deferred; send result already saved"));
     }
-    await report(
-      appUrl,
-      cronSecret,
-      jobId,
-      result.status,
-      result.detail,
-      page,
-    );
     if (result.status !== "success") process.exitCode = 1;
   } catch (error) {
     const info = errorInfo(error);
@@ -150,9 +161,11 @@ async function main(): Promise<void> {
       console.error("[screenshot] no page");
     }
     try {
-      const sessionExpired = Boolean(page && (await isSessionExpired(page)));
-      const detail = sessionExpired ? "session_expired" : errorDetail(error);
-      await postResult(appUrl, cronSecret, jobId, sessionExpired ? "session_expired" : "failed", detail, screenshotUrl);
+      const networkWait = canRetryNetwork(error, submissionStarted);
+      const sessionExpired = !networkWait && Boolean(page && (await isSessionExpired(page)));
+      const detail = networkWait ? "network_unavailable_before_send" : sessionExpired ? "session_expired" :
+        submissionStarted ? "Message was submitted but could not be verified in the chat." : errorDetail(error);
+      await postResult(appUrl, cronSecret, jobId, networkWait ? "network_wait" : sessionExpired ? "session_expired" : "failed", detail, screenshotUrl);
     } catch (reportError) {
       logError(reportError);
     }

@@ -209,7 +209,7 @@ export async function outgoingState(page: Page, message: string): Promise<Outgoi
   };
 }
 
-async function submitMessage(page: Page, message: string): Promise<OutgoingState> {
+async function submitMessage(page: Page, message: string, beforeSubmit: () => Promise<void>): Promise<OutgoingState> {
   console.error("[step] finding composer");
   const input = await findComposer(page);
   if (!input) throw new Error("Could not find the message box");
@@ -224,6 +224,7 @@ async function submitMessage(page: Page, message: string): Promise<OutgoingState
   await page.screenshot({ path: "screenshots/before-send.png" });
   const before = await outgoingState(page, message);
   console.log(`verification-baseline count=${before.count}`);
+  await beforeSubmit();
   await page.keyboard.press("Enter");
   console.log("sent");
   await sleep(2500);
@@ -249,6 +250,7 @@ async function verifyMessage(page: Page, message: string, before: OutgoingState)
 export async function sendMessage(
   page: Page,
   job: WorkerJob,
+  beforeSubmit: () => Promise<void>,
 ): Promise<SendResult> {
   await marked("conversation-opened", () => openConversation(page, job.targetUsername));
 
@@ -259,7 +261,7 @@ export async function sendMessage(
     };
   }
 
-  const before = await submitMessage(page, job.message);
+  const before = await submitMessage(page, job.message, beforeSubmit);
 
   if (await detectSessionExpired(page)) {
     return {
