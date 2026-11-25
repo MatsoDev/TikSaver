@@ -5,6 +5,7 @@ import { getSessionCookies } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 function authorized(request: Request): boolean {
   const expected = process.env.CRON_SECRET?.trim();
@@ -50,5 +51,5 @@ export async function GET(
       claimId: job.claimId,
     },
     cookies,
-  });
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }

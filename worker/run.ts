@@ -97,7 +97,8 @@ async function main(): Promise<void> {
 
   const payload = (await response.json()) as JobPayload;
   if (process.env.CLAIM_ID && payload.job.claimId !== process.env.CLAIM_ID) {
-    throw new Error("The job claim was replaced; refusing to send");
+    console.log("claim-replaced");
+    return;
   }
   if (payload.job.claimId) process.env.CLAIM_ID = payload.job.claimId;
   mark("cookies-loaded");

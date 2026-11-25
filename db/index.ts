@@ -16,7 +16,9 @@ export function getDb(): Database {
     );
   }
 
-  cached = drizzle(neon(url), { schema });
+  // Neon uses HTTP POST for reads too. Never let Next's fetch cache retain
+  // job claims, session cookies or retry state between worker requests.
+  cached = drizzle(neon(url, { fetchOptions: { cache: "no-store" } }), { schema });
   return cached;
 }
 

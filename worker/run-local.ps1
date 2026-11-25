@@ -56,6 +56,7 @@ try {
           if ($line -match '^(job-fetched|cookies-loaded|browser-launched|messages-opened|list-loaded|conversation-opened|composer-clicked|typed|sent|verified)$' -or
               $line -match '^(success|failed|session_expired)$' -or
               $line -match '^result-(posted|queued) status=(success|failed|session_expired|network_wait)$' -or
+              $line -eq 'claim-replaced' -or
               $line -match '^(verification-baseline count=\d+|verify-state before=\d+ after=\d+ text-match=(yes|no))$' -or
               $line -match '^\[(failed-step|conversation-list|screenshot|worker error)\]' -or
               $line -match '^\[navigation\] /[A-Za-z0-9_./-]*$' -or
