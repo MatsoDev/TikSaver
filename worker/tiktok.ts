@@ -1,5 +1,5 @@
 import type { Locator, Page } from "playwright";
-import { humanType, sleep } from "./browser";
+import { humanType, sleep, newContext } from "./browser";
 import { MESSAGES_URL, SELECTORS } from "./selectors";
 import type { SendResult, WorkerJob } from "./types";
 
@@ -129,7 +129,7 @@ async function openConversationFallback(page: Page, username: string): Promise<v
   throw error;
 }
 
-async function openConversation(page: Page, username: string): Promise<void> {
+export async function openConversation(page: Page, username: string): Promise<void> {
   await page.goto(MESSAGES_URL, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
@@ -220,6 +220,12 @@ async function submitMessage(page: Page, message: string, beforeSubmit: () => Pr
   await humanType(page, message);
   console.log("typed");
   await sleep(500);
+  const composed = await input.evaluate((element) =>
+    "value" in element ? String((element as HTMLInputElement).value) : (element.textContent ?? ""),
+  );
+  if (normalizeMessageText(composed) !== normalizeMessageText(message)) {
+    throw new Error("Composer content did not match the requested message; nothing submitted");
+  }
 
   await page.screenshot({ path: "screenshots/before-send.png" });
   const before = await outgoingState(page, message);
@@ -247,6 +253,33 @@ async function verifyMessage(page: Page, message: string, before: OutgoingState)
   return false;
 }
 
+export async function verifyPersistedMessage(
+  source: Page,
+  job: WorkerJob,
+  before: OutgoingState,
+  loadThread: (page: Page, username: string) => Promise<void> = openConversation,
+): Promise<boolean> {
+  const browser = source.context().browser();
+  if (!browser) throw new Error("Cannot independently verify the saved conversation");
+  const context = await newContext(browser, job.timezone);
+  try {
+    // Cookies only: no message DOM, local storage, IndexedDB or browser cache
+    // from the sending page is carried into the verification session.
+    await context.addCookies(await source.context().cookies());
+    const page = await context.newPage();
+    await loadThread(page, job.targetUsername);
+    if (await detectSessionExpired(page)) return false;
+    const persisted = await outgoingState(page, job.message);
+    const matched = persisted.count === before.count + 1 &&
+      normalizeMessageText(persisted.lastText) === normalizeMessageText(job.message);
+    console.log(`persisted-check before=${before.count} after=${persisted.count} match=${matched ? "yes" : "no"}`);
+    await page.screenshot({ path: `screenshots/${job.id}-receipt-${Date.now()}.png` });
+    return matched;
+  } finally {
+    await context.close();
+  }
+}
+
 export async function sendMessage(
   page: Page,
   job: WorkerJob,
@@ -270,9 +303,9 @@ export async function sendMessage(
     };
   }
 
-  if (await verifyMessage(page, job.message, before)) {
+  if (await verifyMessage(page, job.message, before) && await verifyPersistedMessage(page, job, before)) {
     console.log("verified");
-    return { status: "success", detail: "Message sent and verified." };
+    return { status: "success", detail: "New message confirmed after reopening the correct chat in a fresh browser session." };
   }
 
   return {
