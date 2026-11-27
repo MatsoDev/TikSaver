@@ -17,8 +17,16 @@ try {
   for ($i = 0; $i -lt 18; $i++) {
     try { Invoke-WebRequest "https://www.google.com/generate_204" -UseBasicParsing -TimeoutSec 10 | Out-Null; break } catch { if ($i -eq 17) { throw } ; Start-Sleep -Seconds 10 }
   }
-  Start-Sleep -Seconds 25
-  Write-LocalLog "extension_refresh_wait=25"
+  # Allow Chrome to refresh once per boot/session, not on every poll or at midnight.
+  $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+  $sessionKey = "$boot/$([System.Diagnostics.Process]::GetCurrentProcess().SessionId)"
+  $graceFile = Join-Path $logDir "startup-grace.txt"
+  $previousSession = if (Test-Path -LiteralPath $graceFile) { [IO.File]::ReadAllText($graceFile) } else { "" }
+  if ($previousSession -ne $sessionKey) {
+    Start-Sleep -Seconds 25
+    [IO.File]::WriteAllText($graceFile, $sessionKey)
+    Write-LocalLog "startup_refresh_wait=25"
+  }
   $env:APP_URL = $appUrl
   $env:CRON_SECRET = $cron
   $flush = Start-Process -FilePath (Join-Path $node24 "node.exe") `

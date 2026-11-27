@@ -82,6 +82,8 @@ For production schema changes, create a Drizzle migration, review it, and apply 
 
 ### Automatic recovery after a connection outage
 
+The local task checks at whole-minute boundaries and has an additional Cairo-midnight trigger, so leaving the PC on across a new day starts that day's jobs without another sign-in. Chrome's 25-second refresh allowance runs only once per boot/session; it does not delay every poll. The 2–4 minute spacing between jobs still applies, and claiming a new date remains atomic. Apply the saved triggers with `powershell -NoProfile -ExecutionPolicy Bypass -File worker/configure-task.ps1`.
+
 Network errors before sending enter a waiting state and retry after 5, 10, 20, then 30 minutes while the PC is on. The delay remains capped at 30 minutes, and repeated waiting notifications are suppressed. Expired TikTok sessions still require a valid login and are not treated as network failures.
 
 Worker results are saved in the ignored `worker/logs/pending-results/` folder before upload. Every task run flushes this queue before claiming more jobs; lost HTTP acknowledgements replay the same receipt without duplicating the result or notification. A claim interrupted before submission can recover after 20 minutes. The worker must acknowledge a server checkpoint before pressing Enter; once submission begins, an uncertain delivery never triggers an automatic resend.
