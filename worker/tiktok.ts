@@ -253,10 +253,22 @@ async function verifyMessage(page: Page, message: string, before: OutgoingState)
   return false;
 }
 
+export async function latestOutgoingReceipt(page: Page, message: string): Promise<string | null> {
+  const latest = await page.locator(SELECTORS.receiptRow).last().evaluate((row, selectors) => {
+    const body = row.querySelector<HTMLElement>(selectors.text);
+    const timestamp = row.parentElement?.querySelector(selectors.time)?.textContent?.trim();
+    if (!body || !timestamp) return null;
+    const bounds = body.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0 || bounds.left <= window.innerWidth / 2) return null;
+    return { text: body.innerText, timestamp };
+  }, { text: SELECTORS.receiptText, time: SELECTORS.receiptTime }, { timeout: 2_000 }).catch(() => null);
+  return latest && normalizeMessageText(latest.text) === normalizeMessageText(message) ? latest.timestamp : null;
+}
+
 export async function verifyPersistedMessage(
   source: Page,
   job: WorkerJob,
-  before: OutgoingState,
+  receipt: string,
   loadThread: (page: Page, username: string) => Promise<void> = openConversation,
 ): Promise<boolean> {
   const browser = source.context().browser();
@@ -269,11 +281,15 @@ export async function verifyPersistedMessage(
     const page = await context.newPage();
     await loadThread(page, job.targetUsername);
     if (await detectSessionExpired(page)) return false;
-    const persisted = await outgoingState(page, job.message);
-    const matched = persisted.count === before.count + 1 &&
-      normalizeMessageText(persisted.lastText) === normalizeMessageText(job.message);
-    console.log(`persisted-check before=${before.count} after=${persisted.count} match=${matched ? "yes" : "no"}`);
-    await page.screenshot({ path: `screenshots/${job.id}-receipt-${Date.now()}.png` });
+    let matched = false;
+    const deadline = Date.now() + 8_000;
+    do {
+      matched = await latestOutgoingReceipt(page, job.message) === receipt;
+      if (!matched) await sleep(500);
+    } while (!matched && Date.now() < deadline);
+    console.log(`persisted-receipt match=${matched ? "yes" : "no"}`);
+    await page.locator(SELECTORS.receiptRow).last().scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+    await page.screenshot({ path: `screenshots/${job.id}-receipt-${Date.now()}.png` }).catch(() => undefined);
     return matched;
   } finally {
     await context.close();
@@ -294,6 +310,7 @@ export async function sendMessage(
     };
   }
 
+  const previousReceipt = await latestOutgoingReceipt(page, job.message);
   const before = await submitMessage(page, job.message, beforeSubmit);
 
   if (await detectSessionExpired(page)) {
@@ -303,9 +320,12 @@ export async function sendMessage(
     };
   }
 
-  if (await verifyMessage(page, job.message, before) && await verifyPersistedMessage(page, job, before)) {
-    console.log("verified");
-    return { status: "success", detail: "New message confirmed after reopening the correct chat in a fresh browser session." };
+  if (await verifyMessage(page, job.message, before)) {
+    const receipt = await latestOutgoingReceipt(page, job.message);
+    if (receipt && receipt !== previousReceipt && await verifyPersistedMessage(page, job, receipt)) {
+      console.log("verified");
+      return { status: "success", detail: "New message confirmed after reopening the correct chat in a fresh browser session." };
+    }
   }
 
   return {

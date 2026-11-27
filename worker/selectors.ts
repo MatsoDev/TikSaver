@@ -52,6 +52,9 @@ export const SELECTORS = {
     'div[class*="message-content"]',
     'div[class*="MessageContent"]',
   ],
+  receiptRow: '[data-e2e="dm-new-chat-item"]',
+  receiptText: '[data-e2e="dm-new-message-text"]',
+  receiptTime: '[data-e2e="dm-new-time-separator"]',
   outgoingMessage: [
     '[data-e2e="chat-message"][data-is-own="true"]',
     '[data-e2e="chat-message"][data-direction="outgoing"]',

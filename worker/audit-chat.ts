@@ -1,5 +1,5 @@
 import { launchBrowser, newContext, normalizeCookies } from "./browser";
-import { openConversation, outgoingState } from "./tiktok";
+import { openConversation, outgoingState, latestOutgoingReceipt } from "./tiktok";
 import type { JobPayload } from "./types";
 
 // Read-only audit: never types, submits, claims jobs, or reports a success.
@@ -20,6 +20,8 @@ async function audit() {
     const page = await context.newPage();
     await openConversation(page, payload.job.targetUsername);
     const state = await outgoingState(page, payload.job.message);
+    const expectedTime = process.argv[3];
+    if (expectedTime) console.log(`audit-receipt-match=${(await latestOutgoingReceipt(page, payload.job.message)) === expectedTime}`);
     const screenshot = `screenshots/${jobId}-audit-${Date.now()}.png`;
     await page.screenshot({ path: screenshot });
     console.log(`audit-read-only matching=${state.count} path=${new URL(page.url()).pathname}`);
